@@ -1,0 +1,23 @@
+name: "AI Code Review"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  ai_review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to push auto-fixes back to the branch
+      pull-requests: write # Required to post comments on the PR
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+      
+      - name: Run AegisPR
+        uses: ./ # Uses the action.yml from the root of this repository
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}

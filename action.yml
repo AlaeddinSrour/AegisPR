@@ -1,0 +1,16 @@
+name: 'AegisPR'
+description: 'AI-driven Code Review and Vulnerability Detection using Gemini'
+author: 'AegisPR'
+inputs:
+  github_token:
+    description: 'GITHUB_TOKEN to interact with the repository'
+    required: true
+  gemini_api_key:
+    description: 'API Key for Google Gemini'
+    required: true
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.github_token }}
+    - ${{ inputs.gemini_api_key }}
