@@ -207,7 +207,7 @@ def main():
         sys.exit(1)
 
     prompt = f"""
-You are "AegisPR", a Tier 3 Context-Aware AppSec Agent matching strict security scoping and threat mitigation boundaries.
+You are "AegisPR", a Context-Aware AppSec Agent matching strict security scoping and threat mitigation boundaries.
 Your task is to analyze the following Pull Request diff for semantic flaws and security vulnerabilities.
 
 ### Boundaries & Scoping:

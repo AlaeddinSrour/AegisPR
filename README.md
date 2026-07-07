@@ -4,7 +4,7 @@
   <img src="aegis_pr_logo.png" alt="AegisPR Logo" width="250"/>
 </p>
 
-An AI-driven code review and vulnerability detection agent integrated directly into the GitHub CI phase. It is specifically designed to hunt for complex logical bugs, security flaws, and resource leaks in Open-Source Software (OSS) and IoT (Internet of Things) applications before code deployment.
+An AI-driven code review and vulnerability detection agent integrated directly into the GitHub CI phase. It is designed to hunt for complex logical bugs, security flaws, and resource leaks in Open-Source Software (OSS) before code deployment.
 
 Unlike standard static analysis tools, AegisPR uses LLM reasoning to evaluate code context, offering smart explanations and actionable remediations for vulnerabilities like SQL Injection, Command Injection, Stack Buffer Overflows, and Memory Leaks.
 
@@ -13,7 +13,10 @@ Unlike standard static analysis tools, AegisPR uses LLM reasoning to evaluate co
 ## 🚀 Features
 
 *   **Language-Agnostic Reviews**: Automatically reviews code written in Python, C, C++, and more.
-*   **IoT & Memory Safety Focus**: Targets low-level bugs (e.g., buffer overflows, memory leaks, format string vulnerabilities) and high-level bugs (e.g., hardcoded credentials, SQLi, shell command injection).
+*   **Security & Logic Audit Focus**: Targets semantic flaws, context-dependent vulnerabilities (e.g. IDOR, logic bypasses, memory safety issues) rather than simple syntax or styling.
+*   **Semantic Dependency Auditing**: Audits the usage semantics of third-party library imports and manifests (e.g. requirements.txt, package.json) for insecure configurations or ecosystem CVEs.
+*   **Indirect Prompt Injection Defense**: Treats all diff contents as untrusted data, isolating and flagging exploit override instructions.
+*   **Least-Privilege Auto-Fixes**: Integrates deterministic patch cleansing to ensure AI-suggested auto-fixes do not introduce dynamic evaluation, unvetted subprocesses, or loose system permissions.
 *   **PR Integration**: Automatically scans git diffs on Pull Requests and posts detailed, markdown-formatted reviews as comments.
 *   **Local Test Support**: Comes with a utility script to test the AI review locally without committing or pushing.
 *   **Powered by Gemini 3.5 Flash**: Optimized for fast and intelligent code reasoning.
