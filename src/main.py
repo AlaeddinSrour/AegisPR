@@ -6,7 +6,7 @@ import subprocess
 import re
 from typing import List
 from pydantic import BaseModel, Field
-from github import Github
+from github import Github, Auth
 from google import genai
 from google.genai import types
 
@@ -183,7 +183,8 @@ def main():
     
     logger.info(f"Processing PR #{pr_number} in repo {repository} on branch {head_branch}")
 
-    gh = Github(github_token)
+    auth = Auth.Token(github_token)
+    gh = Github(auth=auth)
     repo = gh.get_repo(repository)
     pr = repo.get_pull(pr_number)
 
