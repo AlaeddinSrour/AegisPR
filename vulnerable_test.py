@@ -6,8 +6,8 @@ def unsafe_query(user_id):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     # SQL Injection Vulnerability: direct string injection into SQL command
-    query = f"SELECT * FROM accounts WHERE id = {user_id}"
-    cursor.execute(query)
+    query = "SELECT * FROM accounts WHERE id = ?"
+    cursor.execute(query, (user_id,))
     result = cursor.fetchall()
     conn.close()
     return result
@@ -19,8 +19,8 @@ def unsafe_ping(host):
 
 def unsafe_execution(user_formula):
     # Dynamic Code Evaluation Vulnerability: raw eval on untrusted user input
-    return eval(user_formula)
+    raise NotImplementedError("Dynamic code evaluation with 'eval' is inherently unsafe and should be avoided.")
 
 def unsafe_yaml_load(yaml_string):
     # Unsafe Dependency Usage: yaml.load with the default Loader is vulnerable to arbitrary code execution
-    return yaml.load(yaml_string, Loader=yaml.Loader)
+    return yaml.safe_load(yaml_string)
