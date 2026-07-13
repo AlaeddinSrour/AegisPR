@@ -1,9 +1,7 @@
 import sqlite3
 import os
 import requests
-import pickle
 import hashlib
-import subprocess
 
 API_SECRET = os.environ.get("API_SECRET")
 DB_NAME = "ecommerce.db"
@@ -37,7 +35,7 @@ def backup_database(backup_name):
     shutil.copy(DB_NAME, destination)
 
 def fetch_external_resource(url):
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     return response.text
 
 def read_user_file(filename):
