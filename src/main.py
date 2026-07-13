@@ -234,8 +234,11 @@ Your task is to analyze the following Pull Request diff for semantic flaws and s
 4. **Time-of-Check to Time-of-Use (TOCTOU) Detection**:
    - Identify checks of resource existence followed by access (e.g. `os.path.exists()` check before `open()`).
    - Suggest replacing check-then-act loops with direct exception handling (e.g. `try: open() except FileNotFoundError`) to prevent race conditions during concurrent access.
+5. **Server-Side Request Forgery (SSRF) Mitigations**:
+   - Identify outward network requests (e.g., `requests.get(url)`) using untrusted/unvalidated user input.
+   - Suggest enforcing an allowlist of approved domains or IP addresses before the request is made to prevent accessing internal networks or sensitive endpoints.
 
-=== 5. SEMANTIC THIRD-PARTY DEPENDENCY AUDITING ===
+=== 6. SEMANTIC THIRD-PARTY DEPENDENCY AUDITING ===
 Carefully inspect the diff for any modifications to dependency manifest files (e.g., requirements.txt, package.json, pyproject.toml) or new library import blocks (e.g., 'import', 'from ... import'). 
 You must perform a semantic validation of these libraries:
 - Do not just look at version string metrics. If the diff imports a library known to have structurally dangerous default configurations or critical CVEs in its ecosystem (e.g., unsafe yaml parsers, unpatched crypto libraries), you must catch it.
