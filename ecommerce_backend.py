@@ -5,7 +5,7 @@ import pickle
 import hashlib
 import subprocess
 
-API_SECRET = "sk_live_12345abcdef"
+API_SECRET = os.environ.get("API_SECRET")
 DB_NAME = "ecommerce.db"
 
 def init_db():
@@ -16,28 +16,34 @@ def init_db():
     conn.close()
 
 def login_user(username, password):
-    hashed_pw = hashlib.md5(password.encode()).hexdigest()
+    hashed_pw = hashlib.pbkdf2_hmac("sha256", password.encode(), b"secure_salt_here", 100000).hex()
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{hashed_pw}'"
-    c.execute(query)
+    query = "SELECT * FROM users WHERE username = ? AND password = ?"
+    c.execute(query, (username, hashed_pw))
     user = c.fetchone()
     conn.close()
     return user
 
 def process_webhook(payload_data):
-    obj = pickle.loads(payload_data)
+    import json
+    obj = json.loads(payload_data)
     return obj
 
 def backup_database(backup_name):
-    cmd = "cp " + DB_NAME + " /backups/" + backup_name
-    subprocess.Popen(cmd, shell=True)
+    import shutil
+    safe_backup_name = os.path.basename(backup_name)
+    destination = os.path.join("/backups/", safe_backup_name)
+    shutil.copy(DB_NAME, destination)
 
 def fetch_external_resource(url):
     response = requests.get(url)
     return response.text
 
 def read_user_file(filename):
-    path = "/var/lib/ecommerce/users/" + filename
-    with open(path, 'r') as f:
+    base_dir = os.path.abspath("/var/lib/ecommerce/users/")
+    target_path = os.path.abspath(os.path.join(base_dir, filename))
+    if os.path.commonpath([base_dir, target_path]) != base_dir:
+        raise ValueError("Access Denied: Path Traversal Attempt")
+    with open(target_path, 'r') as f:
         return f.read()
