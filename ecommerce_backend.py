@@ -39,8 +39,8 @@ def fetch_external_resource(url):
     return response.text
 
 def read_user_file(filename):
-    base_dir = os.path.abspath("/var/lib/ecommerce/users/")
-    target_path = os.path.abspath(os.path.join(base_dir, filename))
+    base_dir = os.path.realpath("/var/lib/ecommerce/users/")
+    target_path = os.path.realpath(os.path.join(base_dir, filename))
     if os.path.commonpath([base_dir, target_path]) != base_dir:
         raise ValueError("Access Denied: Path Traversal Attempt")
     with open(target_path, 'r') as f:
