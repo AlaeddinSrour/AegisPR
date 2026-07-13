@@ -25,8 +25,8 @@ def login():
     
     conn = get_db_connection()
     cursor = conn.cursor()
-    query = f"SELECT id, username FROM users WHERE username='{username}' AND password='{hashed}'"
-    cursor.execute(query)
+    query = "SELECT id, username FROM users WHERE username = ? AND password = ?"
+    cursor.execute(query, (username, hashed))
     user = cursor.fetchone()
     conn.close()
     
@@ -43,7 +43,7 @@ def get_invoice(invoice_id):
         
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,))
+    cursor.execute("SELECT * FROM invoices WHERE id = ? AND user_id = ?", (invoice_id, user_id))
     invoice = cursor.fetchone()
     conn.close()
     
@@ -66,9 +66,10 @@ def process_media():
 
 @app.route('/session/restore', methods=['POST'])
 def restore_session():
+    import json
     serialized_data = request.data
     try:
-        user_session = pickle.loads(serialized_data)
+        user_session = json.loads(serialized_data.decode('utf-8'))
         session['user_id'] = user_session.get('user_id')
         return jsonify({"status": "restored"})
     except Exception as e:
@@ -81,8 +82,10 @@ def view_file():
         return jsonify({"error": "unauthorized"}), 401
         
     filepath = request.args.get('path')
-    clean_path = filepath.replace("../", "")
-    full_path = os.path.join("/var/app/storage", clean_path)
+    base_dir = os.path.abspath("/var/app/storage")
+    full_path = os.path.abspath(os.path.join(base_dir, filepath))
+    if not full_path.startswith(base_dir):
+        return jsonify({"error": "unauthorized"}), 403
     
     if os.path.exists(full_path):
         with open(full_path, 'r') as f:
