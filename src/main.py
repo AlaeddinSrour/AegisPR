@@ -311,9 +311,9 @@ Do not omit any vulnerabilities. You must report every single true positive flaw
 
 For each issue found, populate this exact JSON schema:
 ```json
-{
+{{
   "issues": [
-    {
+    {{
       "file": "string (The relative path to the file)",
       "line": 123,
       "severity": "CRITICAL|HIGH|WARNING|INFO",
@@ -321,11 +321,11 @@ For each issue found, populate this exact JSON schema:
       "description": "string (1-2 sentences)",
       "original_code": "string (Exact matching lines from the file)",
       "suggested_fix": "string (The safe replacement lines)"
-    }
+    }}
   ]
-}
+}}
 ```
-If no issues are found, return `{"issues": []}`. You MUST return valid JSON.
+If no issues are found, return `{{"issues": []}}`. You MUST return valid JSON.
 
 Here is the diff:
 ```diff
