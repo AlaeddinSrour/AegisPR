@@ -1,5 +1,6 @@
 import os
 import sys
+import concurrent.futures
 import json
 import logging
 import subprocess
@@ -327,15 +328,19 @@ Here is the diff:
         for attempt in range(2):
             try:
                 logger.info(f"Sending diff to Gemini ({model_name}) for structured analysis (attempt {attempt + 1}/2)...")
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=ReviewReport,
-                        max_output_tokens=8192,
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        client.models.generate_content,
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=ReviewReport,
+                            max_output_tokens=8192,
+                        )
                     )
-                )
+                    # Enforce a strict 60-second timeout per model attempt
+                    response = future.result(timeout=60)
                 success = True
                 break
             except Exception as e:
