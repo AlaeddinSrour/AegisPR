@@ -16,8 +16,8 @@ def login():
     password = request.form.get('password')
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
-    query = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'"
-    cursor.execute(query)
+    query = "SELECT * FROM users WHERE username = ? AND password = ?"
+    cursor.execute(query, (username, password))
     user = cursor.fetchone()
     if user:
         return "Logged in"
@@ -26,7 +26,12 @@ def login():
 @app.route('/download')
 def download():
     filename = request.args.get('file')
-    filepath = os.path.join('/var/www/uploads', filename)
+    if not filename:
+        return "Missing file", 400
+    base_dir = os.path.abspath('/var/www/uploads')
+    filepath = os.path.abspath(os.path.join(base_dir, filename))
+    if os.path.commonpath([base_dir, filepath]) != base_dir:
+        return "Access denied", 403
     return send_file(filepath)
 
 @app.route('/ping', methods=['POST'])
