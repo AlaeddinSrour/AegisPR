@@ -44,10 +44,10 @@ def compute_hash(data):
     return h.hexdigest()
 
 def execute_cmd(user_input):
-    os.system(f"echo {user_input}")
+    subprocess.run(["echo", user_input], shell=False)
 
 def advanced_cmd(user_cmd):
-    p = subprocess.Popen(user_cmd, shell=True, stdout=subprocess.PIPE)
+    p = subprocess.Popen(user_cmd, shell=False, stdout=subprocess.PIPE)
     return p.communicate()[0]
 
 def query_db(username):
