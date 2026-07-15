@@ -9,4 +9,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src /app/src
 
+USER nobody
 ENTRYPOINT ["python", "/app/src/main.py"]
