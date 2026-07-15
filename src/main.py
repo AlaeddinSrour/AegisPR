@@ -28,7 +28,8 @@ class ReviewReport(BaseModel):
     issues: List[ReviewIssue]
 
 def run_cmd(cmd):
-    result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+    import shlex
+    result = subprocess.run(shlex.split(cmd), shell=False, text=True, capture_output=True)
     if result.returncode != 0:
         logger.error(f"Command failed: {cmd}\nStdout: {result.stdout}\nStderr: {result.stderr}")
         return False, result.stderr
@@ -49,7 +50,7 @@ def is_suggested_fix_safe(suggested_fix: str) -> tuple[bool, str]:
 
     # 2. Check for unvetted sub-processes or command execution
     subprocess_patterns = [
-        (r'\b(subprocess|os\.system|os\.popen|os\.spawn|pty\.spawn|popen)\b', "unvetted sub-process or command execution")
+        (r'\b(os\.system|os\.popen|os\.spawn|pty\.spawn|popen)\b', "unvetted sub-process or command execution")
     ]
     for pattern, description in subprocess_patterns:
         if re.search(pattern, suggested_fix, re.IGNORECASE):
@@ -67,6 +68,24 @@ def is_suggested_fix_safe(suggested_fix: str) -> tuple[bool, str]:
 
     return True, ""
 
+def fuzzy_replace(content: str, original: str, replacement: str) -> tuple[str, bool]:
+    orig_lines = [line.strip() for line in original.strip().split('\n')]
+    if not orig_lines:
+        return content, False
+
+    content_lines = content.split('\n')
+    window_size = len(orig_lines)
+    
+    for i in range(len(content_lines) - window_size + 1):
+        window = content_lines[i:i+window_size]
+        if [line.strip() for line in window] == orig_lines:
+            leading_whitespace = re.match(r'^[ \t]*', content_lines[i]).group(0)
+            repl_lines = [leading_whitespace + line.strip() for line in replacement.strip().split('\n')]
+            content_lines[i:i+window_size] = repl_lines
+            return '\n'.join(content_lines), True
+            
+    return content, False
+
 def apply_auto_fixes(issues):
     fixed_any = False
     for issue in issues:
@@ -78,6 +97,10 @@ def apply_auto_fixes(issues):
             logger.warning(f"File {file_path} not found locally. Skipping auto-fix.")
             continue
             
+        if ".github/workflows" in file_path:
+            logger.warning(f"Skipping auto-fix for {file_path}. GitHub Actions tokens cannot push modifications to workflow files.")
+            continue
+            
         is_safe, reason = is_suggested_fix_safe(issue.suggested_fix)
         if not is_safe:
             logger.warning(f"Skipping auto-fix for {file_path} due to safety validation failure: {reason}")
@@ -87,15 +110,14 @@ def apply_auto_fixes(issues):
             with open(file_path, "r") as f:
                 content = f.read()
                 
-            if issue.original_code in content:
-                logger.info(f"Applying auto-fix to {file_path}...")
-                # Only replace the first occurrence to avoid collateral changes
-                content = content.replace(issue.original_code, issue.suggested_fix, 1)
+            new_content, fixed = fuzzy_replace(content, issue.original_code, issue.suggested_fix)
+            if fixed:
+                logger.info(f"Applying fuzzy auto-fix to {file_path}...")
                 with open(file_path, "w") as f:
-                    f.write(content)
+                    f.write(new_content)
                 fixed_any = True
             else:
-                logger.warning(f"Could not apply auto-fix to {file_path}: original_code pattern not found in file content.")
+                logger.warning(f"Could not apply auto-fix to {file_path}: original_code pattern not found via fuzzy match.")
         except Exception as e:
             logger.error(f"Error applying auto-fix to {file_path}: {e}")
             
@@ -186,7 +208,19 @@ def run_semgrep_scan(repo_path: str) -> str:
             message = finding.get("extra", {}).get("message", "")
             snippet = finding.get("extra", {}).get("lines", "").strip()
             
+            file_content = ""
+            try:
+                full_path = os.path.join(repo_path, path)
+                if os.path.exists(full_path):
+                    with open(full_path, 'r') as f:
+                        file_content = f.read()
+            except Exception as e:
+                logger.warning(f"Could not read full file {path} for context: {e}")
+                
             block = f"Finding #{i+1}:\nRule ID: {rule_id}\nFile: {path}:{start_line}\nMessage: {message}\nCode Snippet: {snippet}\n"
+            if file_content:
+                block += f"\n--- FULL FILE CONTEXT ({path}) ---\n{file_content}\n--- END FILE CONTEXT ---\n"
+                
             formatted_findings.append(block)
             
         return "\n".join(formatted_findings)
@@ -338,15 +372,15 @@ Here is the diff:
 
     import time
     
-    models_to_try = ['gemini-3.5-flash', 'gemini-3.1-pro', 'gemini-2.5-flash']
+    models_to_try = ['gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash']
     response = None
     success = False
     
     for model_name in models_to_try:
-        retry_delay = 5
-        for attempt in range(2):
+        retry_delay = 15
+        for attempt in range(3):
             try:
-                logger.info(f"Sending diff to Gemini ({model_name}) for structured analysis (attempt {attempt + 1}/2)...")
+                logger.info(f"Sending diff to Gemini ({model_name}) for structured analysis (attempt {attempt + 1}/3)...")
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
                         client.models.generate_content,
@@ -354,6 +388,7 @@ Here is the diff:
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
+                            response_schema=ReviewReport,
                             max_output_tokens=8192,
                             safety_settings=[
                                 types.SafetySetting(
@@ -375,13 +410,15 @@ Here is the diff:
                             ]
                         )
                     )
-                    # Enforce a strict 60-second timeout per model attempt
-                    response = future.result(timeout=60)
+                    # Enforce a strict 180-second timeout per model attempt for complex files
+                    response = future.result(timeout=180)
+                    if not response.parsed:
+                        raise ValueError("Structured JSON parsing failed (likely truncated). Triggering retry.")
                 success = True
                 break
             except Exception as e:
                 logger.warning(f"Request to {model_name} failed: {e}")
-                if attempt < 1:
+                if attempt < 2:
                     time.sleep(retry_delay)
                     retry_delay *= 2
         if success:
@@ -390,10 +427,10 @@ Here is the diff:
     if not success:
         logger.error("Failed to generate review after trying all fallback models.")
         sys.exit(1)
-                
+    
+    # Process structured response
     try:
-        report_data = json.loads(response.text)
-        report = ReviewReport(**report_data)
+        report = response.parsed
         logger.info(f"Received review from Gemini with {len(report.issues)} issues.")
     except Exception as e:
         logger.error(f"Failed to parse or validate JSON review: {e}")

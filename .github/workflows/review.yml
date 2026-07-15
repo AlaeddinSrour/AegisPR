@@ -6,6 +6,7 @@ on:
 
 jobs:
   ai_review:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to push auto-fixes back to the branch
