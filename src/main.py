@@ -20,9 +20,9 @@ class ReviewIssue(BaseModel):
     line: int = Field(description="The line number (1-indexed) in the file where the issue is. MUST be a valid line number in the current version of the file.")
     severity: str = Field(description="Vulnerability severity. Allowed values: CRITICAL, HIGH, WARNING, INFO.")
     issue_name: str = Field(description="Short name of the issue, e.g. SQL Injection, Vulnerable Package Import / Deprecated Dependency Semantics.")
-    description: str = Field(description="Detailed explanation of the bug, risk, and remediation.")
-    original_code: str = Field(description="The exact lines of code in the file that need to be replaced. Must match exactly. Leave empty if no automatic fix is possible.")
-    suggested_fix: str = Field(description="The corrected code block to replace original_code. Leave empty if no automatic fix is possible.")
+    description: str = Field(description="Strictly 1-2 sentences explaining the bug and remediation.")
+    original_code: str = Field(description="Strictly the 1-2 exact lines of code that need to be replaced. Do not include entire functions. Must match exactly.")
+    suggested_fix: str = Field(description="Strictly the 1-2 corrected lines to replace original_code. Do not include entire functions.")
 
 class ReviewReport(BaseModel):
     issues: List[ReviewIssue]
@@ -309,11 +309,24 @@ To ensure ALL vulnerabilities are successfully reported without API truncation, 
 2. Keep `original_code` and `suggested_fix` strictly to the exact lines that require changing, rather than outputting entire function blocks.
 Do not omit any vulnerabilities. You must report every single true positive flaw you find.
 
-For each issue found, populate the response schema:
-- Set 'severity' to CRITICAL, HIGH, WARNING, or INFO.
-- Provide the exact filename and line number.
-- To enable automatic fixing, provide the 'original_code' (the exact text to replace) and 'suggested_fix' (the drop-in replacement). If the original_code does not match the file contents exactly, the auto-fix will fail. Ensure suggested fixes comply with the least-privilege principle and do not introduce dynamic evaluation, unvetted subprocesses, or over-permissive system settings.
-- If no issues are found, return an empty list of issues.
+For each issue found, populate the following JSON structure. You MUST return a single JSON object containing an "issues" array.
+Do NOT use `...` or truncate the array. You MUST output every single true positive vulnerability you find.
+Do NOT output markdown backticks (```json). Output raw, perfectly valid JSON only.
+
+Example format:
+{{
+  "issues": [
+    {{
+      "file": "path/to/file.c",
+      "line": 42,
+      "severity": "CRITICAL",
+      "issue_name": "Buffer Overflow",
+      "description": "Short 1-2 sentence description explaining the bug.",
+      "original_code": "strcpy(buf, user_input);",
+      "suggested_fix": "strncpy(buf, user_input, sizeof(buf));"
+    }}
+  ]
+}}
 
 Here is the diff:
 ```diff
@@ -341,7 +354,6 @@ Here is the diff:
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
-                            response_schema=ReviewReport,
                             max_output_tokens=8192,
                             safety_settings=[
                                 types.SafetySetting(
