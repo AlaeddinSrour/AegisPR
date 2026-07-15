@@ -186,9 +186,15 @@ def run_semgrep_scan(repo_path: str) -> str:
     """
     logger.info("Running Semgrep scan for sequential triage...")
     try:
-        # We use --config auto to run default community rules
+        semgrep_cmd = [
+            "semgrep", "scan",
+            "--config", "auto",
+            "--exclude", ".github",
+            "--json",
+            "--quiet"
+        ]
         result = subprocess.run(
-            ["semgrep", "scan", "--json", "--quiet", "--config", "auto", repo_path],
+            semgrep_cmd + [repo_path],
             capture_output=True,
             text=True
         )
