@@ -1,5 +1,6 @@
 import os
 import sys
+import concurrent.futures
 import json
 import logging
 import subprocess
@@ -302,6 +303,12 @@ You are receiving raw findings from Semgrep. You must act as the Senior AppSec E
 2. If it is a True Positive, report it in your final JSON output and provide an auto-fix.
 3. If it is a False Positive, completely ignore it in your final output.
 
+CRITICAL JSON LENGTH LIMITS:
+To ensure ALL vulnerabilities are successfully reported without API truncation, you MUST:
+1. Keep your `description` extremely brief (1-2 sentences max).
+2. Keep `original_code` and `suggested_fix` strictly to the exact lines that require changing, rather than outputting entire function blocks.
+Do not omit any vulnerabilities. You must report every single true positive flaw you find.
+
 For each issue found, populate the response schema:
 - Set 'severity' to CRITICAL, HIGH, WARNING, or INFO.
 - Provide the exact filename and line number.
@@ -327,15 +334,24 @@ Here is the diff:
         for attempt in range(2):
             try:
                 logger.info(f"Sending diff to Gemini ({model_name}) for structured analysis (attempt {attempt + 1}/2)...")
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=ReviewReport,
-                        max_output_tokens=8192,
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        client.models.generate_content,
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=ReviewReport,
+                            max_output_tokens=8192,
+                            safety_settings=[
+                                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                                types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                            ]
+                        )
                     )
-                )
+                    response = future.result(timeout=60)
                 success = True
                 break
             except Exception as e:
