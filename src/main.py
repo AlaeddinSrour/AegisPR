@@ -372,7 +372,7 @@ Here is the diff:
 
     import time
     
-    models_to_try = ['gemini-3.5-flash', 'gemini-3.1-pro', 'gemini-2.5-flash']
+    models_to_try = ['gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash']
     response = None
     success = False
     
@@ -412,6 +412,8 @@ Here is the diff:
                     )
                     # Enforce a strict 180-second timeout per model attempt for complex files
                     response = future.result(timeout=180)
+                    if not response.parsed:
+                        raise ValueError("Structured JSON parsing failed (likely truncated). Triggering retry.")
                 success = True
                 break
             except Exception as e:
