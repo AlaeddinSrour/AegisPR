@@ -61,6 +61,8 @@ def connect_ssh(host, user, password):
     client = paramiko.SSHClient()
     client.load_system_host_keys()
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    if not is_allowed_host(host):
+        raise ValueError('Unauthorized host for SSH connection')
     client.connect(host, username=user, password=password)
     return client
 
