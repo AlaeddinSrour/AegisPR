@@ -26,6 +26,10 @@ def process_yaml(yaml_string):
     return data
 
 def make_request(url):
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.netloc not in ['safe.domain.com']:
+        raise ValueError('Unauthorized domain')
     response = requests.get(url, verify=True)
     return response.text
 
