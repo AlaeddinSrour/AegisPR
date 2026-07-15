@@ -339,7 +339,7 @@ Here is the diff:
 
     import time
     
-    models_to_try = ['gemini-3.5-flash']
+    models_to_try = ['gemini-1.5-pro', 'gemini-1.5-flash']
     response = None
     success = False
     
