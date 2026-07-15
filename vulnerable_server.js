@@ -85,7 +85,11 @@ app.post('/upload-xml', (req, res) => {
 
 app.get('/update_config', (req, res) => {
     const configFile = req.query.file;
-    fs.readFile(configFile, 'utf8', (err, data) => {
+    const baseDir = '/var/www/config/';
+    const resolvedPath = path.resolve(baseDir, configFile);
+    const relative = path.relative(baseDir, resolvedPath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) return res.status(403).send("Access Denied");
+    fs.readFile(resolvedPath, 'utf8', (err, data) => {
         if (err) return res.send("File not found");
         res.send(data);
     });
