@@ -28,7 +28,8 @@ class ReviewReport(BaseModel):
     issues: List[ReviewIssue]
 
 def run_cmd(cmd):
-    result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+    import shlex
+    result = subprocess.run(shlex.split(cmd), shell=False, text=True, capture_output=True)
     if result.returncode != 0:
         logger.error(f"Command failed: {cmd}\nStdout: {result.stdout}\nStderr: {result.stderr}")
         return False, result.stderr
