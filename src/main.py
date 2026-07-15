@@ -309,11 +309,24 @@ To ensure ALL vulnerabilities are successfully reported without API truncation, 
 2. Keep `original_code` and `suggested_fix` strictly to the exact lines that require changing, rather than outputting entire function blocks.
 Do not omit any vulnerabilities. You must report every single true positive flaw you find.
 
-For each issue found, populate the response schema:
-- Set 'severity' to CRITICAL, HIGH, WARNING, or INFO.
-- Provide the exact filename and line number.
-- To enable automatic fixing, provide the 'original_code' (the exact text to replace) and 'suggested_fix' (the drop-in replacement). If the original_code does not match the file contents exactly, the auto-fix will fail. Ensure suggested fixes comply with the least-privilege principle.
-- If no issues are found, return an empty list of issues.
+For each issue found, populate the following JSON structure. You MUST return a single JSON object containing an "issues" array.
+Do NOT use `...` or truncate the array. You MUST output every single true positive vulnerability you find.
+Do NOT output markdown backticks (```json). Output raw, perfectly valid JSON only.
+
+Example format:
+{{
+  "issues": [
+    {{
+      "file": "path/to/file.c",
+      "line": 42,
+      "severity": "CRITICAL",
+      "issue_name": "Buffer Overflow",
+      "description": "Short 1-2 sentence description explaining the bug.",
+      "original_code": "strcpy(buf, user_input);",
+      "suggested_fix": "strncpy(buf, user_input, sizeof(buf));"
+    }}
+  ]
+}}
 
 Here is the diff:
 ```diff
@@ -341,7 +354,6 @@ Here is the diff:
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
-                            response_schema=ReviewReport,
                             max_output_tokens=8192,
                             safety_settings=[
                                 types.SafetySetting(
