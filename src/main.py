@@ -155,6 +155,44 @@ def post_inline_comments(pr, latest_commit, issues):
             except Exception as fe:
                 logger.error(f"Failed to post fallback PR comment: {fe}")
 
+
+
+def run_semgrep_scan(repo_path: str) -> str:
+    """
+    Runs Semgrep on the repository and returns formatted findings for LLM triage.
+    """
+    logger.info("Running Semgrep scan for sequential triage...")
+    try:
+        # We use --config auto to run default community rules
+        result = subprocess.run(
+            ["semgrep", "scan", "--json", "--quiet", "--config", "auto", repo_path],
+            capture_output=True,
+            text=True
+        )
+        if not result.stdout:
+            return ""
+            
+        data = json.loads(result.stdout)
+        results = data.get("results", [])
+        if not results:
+            return ""
+            
+        formatted_findings = []
+        for i, finding in enumerate(results):
+            path = finding.get("path", "")
+            start_line = finding.get("start", {}).get("line", "")
+            rule_id = finding.get("check_id", "")
+            message = finding.get("extra", {}).get("message", "")
+            snippet = finding.get("extra", {}).get("lines", "").strip()
+            
+            block = f"Finding #{i+1}:\nRule ID: {rule_id}\nFile: {path}:{start_line}\nMessage: {message}\nCode Snippet: {snippet}\n"
+            formatted_findings.append(block)
+            
+        return "\n".join(formatted_findings)
+    except Exception as e:
+        logger.error(f"Semgrep scan failed: {e}")
+        return ""
+
 def main():
     if len(sys.argv) < 3:
         logger.error("Usage: main.py <github_token> <gemini_api_key>")
@@ -201,6 +239,17 @@ def main():
 
     logger.info(f"Extracted diff ({len(diff_text)} characters).")
 
+
+
+    semgrep_findings = ""
+    try:
+        workspace = os.getenv("GITHUB_WORKSPACE", "/github/workspace")
+        semgrep_findings = run_semgrep_scan(workspace)
+        if semgrep_findings:
+            logger.info("Semgrep findings extracted. Injecting into prompt for triage.")
+    except Exception as e:
+        logger.error(f"Failed to run Semgrep: {e}")
+
     try:
         client = genai.Client(api_key=gemini_api_key)
     except Exception as e:
@@ -239,10 +288,17 @@ Your task is to analyze the following Pull Request diff for semantic flaws and s
    - Suggest enforcing an allowlist of approved domains or IP addresses before the request is made to prevent accessing internal networks or sensitive endpoints.
 
 === 6. SEMANTIC THIRD-PARTY DEPENDENCY AUDITING ===
+### 6. SEMANTIC THIRD-PARTY DEPENDENCY AUDITING
 Carefully inspect the diff for any modifications to dependency manifest files (e.g., requirements.txt, package.json, pyproject.toml) or new library import blocks (e.g., 'import', 'from ... import'). 
 You must perform a semantic validation of these libraries:
 - Do not just look at version string metrics. If the diff imports a library known to have structurally dangerous default configurations or critical CVEs in its ecosystem (e.g., unsafe yaml parsers, unpatched crypto libraries), you must catch it.
 - Flag the issue specifying the exact manifest file or code file, set the severity to HIGH or CRITICAL if the usage introduces an immediate path to compromise, and generate a secure 'suggested_fix' modifying the package statement to a safe version or safe usage format.
+
+### 7. SEMGREP TRIAGE
+You are receiving raw findings from Semgrep. You must act as the Senior AppSec Engineer to triage them:
+1. Determine if each finding is a True Positive or a False Positive based on the context.
+2. If it is a True Positive, report it in your final JSON output and provide an auto-fix.
+3. If it is a False Positive, completely ignore it in your final output.
 
 For each issue found, populate the response schema:
 - Set 'severity' to CRITICAL, HIGH, WARNING, or INFO.
@@ -254,6 +310,8 @@ Here is the diff:
 ```diff
 {diff_text}
 ```
+
+{f"=== SEMGREP FINDINGS (TRIAGE REQUIRED) ===\n{semgrep_findings}" if semgrep_findings else ""}
 """
 
     import time
