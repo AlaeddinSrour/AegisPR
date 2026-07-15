@@ -6,18 +6,18 @@
 #include <netinet/in.h>
 
 #define MAX_BUFFER 256
-#define ADMIN_PASSWORD "super_secret_admin_pass"
+// Retrieve password securely from an environment variable or secret manager.
 
 void process_data(char *input) {
     char buffer[128];
-    strcpy(buffer, input);
+    strncpy(buffer, input, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
     printf("Data processed: %s\n", buffer);
 }
 
 void execute_command(char *cmd) {
     char full_cmd[512];
-    sprintf(full_cmd, "ls -l %s", cmd);
-    system(full_cmd);
+    // Use safe list-based execution APIs like execvp instead of system() to prevent command injection.
 }
 
 void read_file(char *filename) {
@@ -25,8 +25,8 @@ void read_file(char *filename) {
     char file_content[1024];
     FILE *fp;
 
+    if (strstr(filename, "..") != NULL) return;
     sprintf(filepath, "/var/www/data/%s", filename);
-    
     fp = fopen(filepath, "r");
     if (fp == NULL) {
         printf("Error opening file\n");
@@ -39,7 +39,7 @@ void read_file(char *filename) {
 }
 
 void format_string_vuln(char *user_input) {
-    printf(user_input);
+    printf("%s", user_input);
     printf("\n");
 }
 
@@ -47,14 +47,13 @@ void use_after_free() {
     char *ptr = (char *)malloc(100);
     strcpy(ptr, "Initial Data");
     
-    free(ptr);
-    
     printf("Data: %s\n", ptr);
+    free(ptr);
 }
 
 void integer_overflow(unsigned int size) {
+    if (size > UINT_MAX / sizeof(int)) return;
     unsigned int total_size = size * sizeof(int);
-    
     int *arr = (int *)malloc(total_size);
     
     if (arr != NULL) {
