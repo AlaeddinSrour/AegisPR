@@ -405,9 +405,17 @@ Here is the diff:
         except json.JSONDecodeError as e:
             logger.warning(f"Initial JSON parse failed: {e}. Attempting heuristic repair...")
             # Often the LLM forgets the final closing brace for the root object
-            if text.endswith("]"):
-                text += "}"
-                report_data = json.loads(text)
+            # Heuristic repair for LLM-generated JSON often involves missing final braces.
+            # Only attempt to add '}' if it's clearly an object missing its closing brace.
+            # A safer approach might be to not attempt heuristic repair if unsure, and log the error.
+            # For example, to attempt to close an object missing '}' and not ending with ']', one might do:
+            # if text.startswith('{') and not text.endswith('}') and not text.endswith(']'):
+            #    text += '}'
+            #    report_data = json.loads(text)
+            # else:
+            #    raise e
+            # For now, removing the problematic heuristic. Consider a more robust JSON repair library if needed.
+            raise e
             else:
                 raise e
                 
