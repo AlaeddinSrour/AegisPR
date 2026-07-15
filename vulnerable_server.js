@@ -12,13 +12,11 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Hardcoded Secrets
 const AWS_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE";
 const JWT_SECRET = "super_secret_jwt_key_123!";
 
 const db = new sqlite3.Database(':memory:');
 
-// 1. SQL Injection
 app.post('/login', (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
@@ -33,7 +31,6 @@ app.post('/login', (req, res) => {
     });
 });
 
-// 2. Command Injection
 app.get('/ping', (req, res) => {
     const ip = req.query.ip;
     const cmd = "ping -c 1 " + ip;
@@ -47,7 +44,6 @@ app.get('/ping', (req, res) => {
     });
 });
 
-// 3. Path Traversal
 app.get('/download', (req, res) => {
     const filename = req.query.file;
     const baseDir = '/var/www/uploads/';
@@ -59,14 +55,12 @@ app.get('/download', (req, res) => {
     });
 });
 
-// 4. Insecure Cryptographic Hashing
 app.get('/hash', (req, res) => {
     const password = req.query.p;
     const hash = crypto.createHash('md5').update(password).digest('hex');
     res.send(hash);
 });
 
-// 5. Server-Side Request Forgery (SSRF)
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
     try {
@@ -77,27 +71,21 @@ app.get('/proxy', async (req, res) => {
     }
 });
 
-// 6. Insecure Deserialization
 app.post('/profile/load', (req, res) => {
     const data = req.body.data;
-    // user input passed directly to unsafe node-serialize un-serialize function
     const obj = serialize.unserialize(data);
     res.send(`Loaded profile for ${obj.username}`);
 });
 
-// 7. XML External Entity (XXE)
 app.post('/upload-xml', (req, res) => {
     const xmlData = req.body.xml;
-    // Parsing XML with NOENT enables external entity expansion (XXE)
     const xmlDoc = libxmljs.parseXmlString(xmlData, { noent: true });
     res.send("XML parsed successfully");
 });
 
-// 8. Time-of-Check to Time-of-Use (TOCTOU)
 app.get('/update_config', (req, res) => {
     const configFile = req.query.file;
     if (fs.existsSync(configFile)) {
-        // Race condition: file could be replaced/symlinked between check and read
         const data = fs.readFileSync(configFile, 'utf8');
         res.send(data);
     } else {
