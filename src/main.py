@@ -97,6 +97,10 @@ def apply_auto_fixes(issues):
             logger.warning(f"File {file_path} not found locally. Skipping auto-fix.")
             continue
             
+        if ".github/workflows" in file_path:
+            logger.warning(f"Skipping auto-fix for {file_path}. GitHub Actions tokens cannot push modifications to workflow files.")
+            continue
+            
         is_safe, reason = is_suggested_fix_safe(issue.suggested_fix)
         if not is_safe:
             logger.warning(f"Skipping auto-fix for {file_path} due to safety validation failure: {reason}")
