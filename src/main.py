@@ -392,7 +392,25 @@ Here is the diff:
         sys.exit(1)
                 
     try:
-        report_data = json.loads(response.text)
+        text = response.text.strip()
+        # Remove markdown codeblocks if LLM hallucinated them
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+        
+        try:
+            report_data = json.loads(text)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Initial JSON parse failed: {e}. Attempting heuristic repair...")
+            # Often the LLM forgets the final closing brace for the root object
+            if text.endswith("]"):
+                text += "}"
+                report_data = json.loads(text)
+            else:
+                raise e
+                
         report = ReviewReport(**report_data)
         logger.info(f"Received review from Gemini with {len(report.issues)} issues.")
     except Exception as e:
