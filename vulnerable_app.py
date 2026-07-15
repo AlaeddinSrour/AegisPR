@@ -59,9 +59,14 @@ def profile():
 @app.route('/load', methods=['POST'])
 def load_data():
     data = request.form.get('data')
-    decoded = base64.b64decode(data)
-    obj = pickle.loads(decoded)
-    return str(obj)
+    if not data:
+        return "Missing data", 400
+    try:
+        decoded = base64.b64decode(data).decode('utf-8')
+        obj = json.loads(decoded)
+        return str(obj)
+    except Exception:
+        return "Invalid data format", 400
 
 @app.route('/update_config')
 def update_config():
