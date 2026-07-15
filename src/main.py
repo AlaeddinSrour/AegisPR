@@ -338,7 +338,7 @@ Here is the diff:
 
     import time
     
-    models_to_try = ['gemini-3.5-flash', 'gemini-3.1-flash', 'gemini-2.5-flash']
+    models_to_try = ['gemini-3.5-flash']
     response = None
     success = False
     
@@ -375,8 +375,8 @@ Here is the diff:
                             ]
                         )
                     )
-                    # Enforce a strict 60-second timeout per model attempt
-                    response = future.result(timeout=60)
+                    # Enforce a strict 180-second timeout per model attempt for complex files
+                    response = future.result(timeout=180)
                 success = True
                 break
             except Exception as e:
