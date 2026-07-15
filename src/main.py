@@ -256,6 +256,8 @@ def main():
         logger.error(f"Failed to initialize Gemini client: {e}")
         sys.exit(1)
 
+    semgrep_section = f"=== SEMGREP FINDINGS (TRIAGE REQUIRED) ===\n{semgrep_findings}" if semgrep_findings else ""
+
     prompt = f"""
 You are "AegisPR", a Context-Aware AppSec Agent matching strict security scoping and threat mitigation boundaries.
 Your task is to analyze the following Pull Request diff for semantic flaws and security vulnerabilities.
@@ -311,7 +313,7 @@ Here is the diff:
 {diff_text}
 ```
 
-{f"=== SEMGREP FINDINGS (TRIAGE REQUIRED) ===\n{semgrep_findings}" if semgrep_findings else ""}
+{semgrep_section}
 """
 
     import time
