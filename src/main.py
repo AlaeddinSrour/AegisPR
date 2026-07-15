@@ -309,11 +309,23 @@ To ensure ALL vulnerabilities are successfully reported without API truncation, 
 2. Keep `original_code` and `suggested_fix` strictly to the exact lines that require changing, rather than outputting entire function blocks.
 Do not omit any vulnerabilities. You must report every single true positive flaw you find.
 
-For each issue found, populate the response schema:
-- Set 'severity' to CRITICAL, HIGH, WARNING, or INFO.
-- Provide the exact filename and line number.
-- To enable automatic fixing, provide the 'original_code' (the exact text to replace) and 'suggested_fix' (the drop-in replacement). If the original_code does not match the file contents exactly, the auto-fix will fail. Ensure suggested fixes comply with the least-privilege principle and do not introduce dynamic evaluation, unvetted subprocesses, or over-permissive system settings.
-- If no issues are found, return an empty list of issues.
+For each issue found, populate this exact JSON schema:
+```json
+{
+  "issues": [
+    {
+      "file": "string (The relative path to the file)",
+      "line": 123,
+      "severity": "CRITICAL|HIGH|WARNING|INFO",
+      "issue_name": "string",
+      "description": "string (1-2 sentences)",
+      "original_code": "string (Exact matching lines from the file)",
+      "suggested_fix": "string (The safe replacement lines)"
+    }
+  ]
+}
+```
+If no issues are found, return `{"issues": []}`. You MUST return valid JSON.
 
 Here is the diff:
 ```diff
@@ -341,7 +353,6 @@ Here is the diff:
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
-                            response_schema=ReviewReport,
                             max_output_tokens=8192,
                             safety_settings=[
                                 types.SafetySetting(
