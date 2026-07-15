@@ -12,17 +12,17 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-const AWS_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE";
-const JWT_SECRET = "super_secret_jwt_key_123!";
+const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const db = new sqlite3.Database(':memory:');
 
 app.post('/login', (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
-    const query = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'";
+    const query = "SELECT * FROM users WHERE username = ? AND password = ?";
     
-    db.get(query, (err, row) => {
+    db.get(query, [username, password], (err, row) => {
         if (row) {
             res.send("Logged in");
         } else {
@@ -33,9 +33,8 @@ app.post('/login', (req, res) => {
 
 app.get('/ping', (req, res) => {
     const ip = req.query.ip;
-    const cmd = "ping -c 1 " + ip;
-    
-    exec(cmd, (error, stdout, stderr) => {
+    const { execFile } = require('child_process');
+    execFile('ping', ['-c', '1', ip], (error, stdout, stderr) => {
         if (error) {
             res.send(`Error: ${error.message}`);
             return;
@@ -47,8 +46,8 @@ app.get('/ping', (req, res) => {
 app.get('/download', (req, res) => {
     const filename = req.query.file;
     const baseDir = '/var/www/uploads/';
-    const filePath = path.join(baseDir, filename);
-    
+    const filePath = path.resolve(baseDir, filename);
+    if (!filePath.startsWith(baseDir)) return res.status(403).send("Access Denied");
     fs.readFile(filePath, 'utf8', (err, data) => {
         if (err) return res.status(404).send("File not found");
         res.send(data);
@@ -57,13 +56,14 @@ app.get('/download', (req, res) => {
 
 app.get('/hash', (req, res) => {
     const password = req.query.p;
-    const hash = crypto.createHash('md5').update(password).digest('hex');
+    const hash = crypto.createHash('sha256').update(password).digest('hex');
     res.send(hash);
 });
 
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
     try {
+        if (!targetUrl.startsWith('https://api.trusted.com/')) return res.status(403).send('Forbidden');
         const response = await axios.get(targetUrl);
         res.send(response.data);
     } catch (error) {
@@ -73,24 +73,22 @@ app.get('/proxy', async (req, res) => {
 
 app.post('/profile/load', (req, res) => {
     const data = req.body.data;
-    const obj = serialize.unserialize(data);
+    const obj = JSON.parse(data);
     res.send(`Loaded profile for ${obj.username}`);
 });
 
 app.post('/upload-xml', (req, res) => {
     const xmlData = req.body.xml;
-    const xmlDoc = libxmljs.parseXmlString(xmlData, { noent: true });
+    const xmlDoc = libxmljs.parseXmlString(xmlData, { noent: false });
     res.send("XML parsed successfully");
 });
 
 app.get('/update_config', (req, res) => {
     const configFile = req.query.file;
-    if (fs.existsSync(configFile)) {
-        const data = fs.readFileSync(configFile, 'utf8');
+    fs.readFile(configFile, 'utf8', (err, data) => {
+        if (err) return res.send("File not found");
         res.send(data);
-    } else {
-        res.send("File not found");
-    }
+    });
 });
 
 app.listen(3000, () => console.log('Server running on port 3000'));
