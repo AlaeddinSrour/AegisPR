@@ -343,10 +343,10 @@ Here is the diff:
     success = False
     
     for model_name in models_to_try:
-        retry_delay = 5
-        for attempt in range(2):
+        retry_delay = 15
+        for attempt in range(3):
             try:
-                logger.info(f"Sending diff to Gemini ({model_name}) for structured analysis (attempt {attempt + 1}/2)...")
+                logger.info(f"Sending diff to Gemini ({model_name}) for structured analysis (attempt {attempt + 1}/3)...")
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
                         client.models.generate_content,
@@ -381,7 +381,7 @@ Here is the diff:
                 break
             except Exception as e:
                 logger.warning(f"Request to {model_name} failed: {e}")
-                if attempt < 1:
+                if attempt < 2:
                     time.sleep(retry_delay)
                     retry_delay *= 2
         if success:
