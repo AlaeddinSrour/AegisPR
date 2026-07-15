@@ -303,6 +303,9 @@ You are receiving raw findings from Semgrep. You must act as the Senior AppSec E
 2. If it is a True Positive, report it in your final JSON output and provide an auto-fix.
 3. If it is a False Positive, completely ignore it in your final output.
 
+CRITICAL JSON LENGTH LIMITS:
+To prevent API truncation, you MUST keep your `description` extremely brief (1 sentence max). If there are more than 4 critical issues, only report the top 4 most critical ones.
+
 For each issue found, populate the response schema:
 - Set 'severity' to CRITICAL, HIGH, WARNING, or INFO.
 - Provide the exact filename and line number.
