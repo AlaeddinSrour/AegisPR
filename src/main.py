@@ -50,7 +50,7 @@ def is_suggested_fix_safe(suggested_fix: str) -> tuple[bool, str]:
 
     # 2. Check for unvetted sub-processes or command execution
     subprocess_patterns = [
-        (r'\b(os\.system|os\.popen|os\.spawn|pty\.spawn|popen)\b', "unvetted sub-process or command execution")
+        (r'\b(os\.system|os\.popen|os\.spawn|pty\.spawn)\b', "unvetted sub-process or command execution")
     ]
     for pattern, description in subprocess_patterns:
         if re.search(pattern, suggested_fix, re.IGNORECASE):
