@@ -1,25 +1,25 @@
-# AegisPR: AI-Driven CI/CD Code Reviewer
+# AegisPR: Enterprise AI-Driven CI/CD Security Agent
 
 <p align="center">
   <img src="aegis_pr_logo.png" alt="AegisPR Logo" width="250"/>
 </p>
 
-An AI-driven code review and vulnerability detection agent integrated directly into the GitHub CI phase. It is designed to hunt for complex logical bugs, security flaws, and resource leaks in Open-Source Software (OSS) before code deployment.
+An enterprise-grade, autonomous AI Code Reviewer and Vulnerability Detection Agent integrated directly into the GitHub CI phase. It is designed to hunt for complex logical bugs, security flaws, and resource leaks in Open-Source Software (OSS) before code deployment.
 
-Unlike standard static analysis tools, AegisPR uses LLM reasoning to evaluate code context, offering smart explanations and actionable remediations for vulnerabilities like SQL Injection, Command Injection, Stack Buffer Overflows, and Memory Leaks.
+Unlike standard static analysis tools, AegisPR uses LLM reasoning to evaluate code context, offering smart explanations and **secure auto-fixing** for vulnerabilities like Command Injection, Stack Buffer Overflows, Supply Chain Risks, and Memory Leaks.
 
 ---
 
-## 🚀 Features
+## 🚀 Enterprise Features
 
-*   **Language-Agnostic Reviews**: Automatically reviews code written in Python, C, C++, and more.
-*   **Security & Logic Audit Focus**: Targets semantic flaws, context-dependent vulnerabilities (e.g. IDOR, logic bypasses, memory safety issues) rather than simple syntax or styling.
-*   **Semantic Dependency Auditing**: Audits the usage semantics of third-party library imports and manifests (e.g. requirements.txt, package.json) for insecure configurations or ecosystem CVEs.
-*   **Indirect Prompt Injection Defense**: Treats all diff contents as untrusted data, isolating and flagging exploit override instructions.
-*   **Least-Privilege Auto-Fixes**: Integrates deterministic patch cleansing to ensure AI-suggested auto-fixes do not introduce dynamic evaluation, unvetted subprocesses, or loose system permissions.
-*   **PR Integration**: Automatically scans git diffs on Pull Requests and posts detailed, markdown-formatted reviews as comments.
-*   **Local Test Support**: Comes with a utility script to test the AI review locally without committing or pushing.
-*   **Powered by Gemini 3.5 Flash**: Optimized for fast and intelligent code reasoning.
+*   **Language-Agnostic Reviews**: Automatically reviews code written in Python, C, C++, JavaScript, and more.
+*   **Diff-Aware Scanning**: Only flags vulnerabilities introduced in the exact lines modified in the Pull Request. Zero alert fatigue—developers are never blocked for legacy technical debt!
+*   **Fuzzy Auto-Fixer**: Safely injects AI-synthesized patches into your codebase while mathematically adapting to bizarre indentation anomalies and custom styles.
+*   **Deep Context Enrichment**: Injects the full contents of vulnerable files into the AI context window, allowing the LLM to understand cross-function dependencies before suggesting fixes.
+*   **Semantic Dependency Auditing**: Audits the usage semantics of third-party library imports and manifests (e.g. `Dockerfile`, `requirements.txt`, `package.json`) for insecure configurations or ecosystem CVEs.
+*   **Least-Privilege Auto-Fixes**: Integrates a custom safety validator to ensure AI-suggested auto-fixes do not introduce dynamic evaluation (`eval`), unvetted subprocesses, or loose system permissions (`chmod 777`).
+*   **API Failover & Throttling**: Automatically fails over between `gemini-3.5-flash`, `gemini-2.5-pro`, and `gemini-2.5-flash` using exponential backoff to handle enterprise rate-limits.
+*   **CI/CD Self-Protection**: Prevents infinite CI loops by skipping triggers on bot commits, and gracefully ignores supply-chain fixes inside `.github/workflows` to prevent permission crashes.
 
 ---
 
@@ -27,36 +27,17 @@ Unlike standard static analysis tools, AegisPR uses LLM reasoning to evaluate co
 
 ```text
 ├── .github/workflows/
-│   └── review.yml          # GitHub Actions workflow trigger
+│   ├── review.yml          # GitHub Actions workflow trigger for AegisPR
+│   └── test.yml            # CI/CD pipeline running PyTest for AegisPR's internal logic
 ├── src/
-│   └── main.py             # Core Python logic for fetching diffs and calling Gemini API
+│   └── main.py             # Core Python logic for the autonomous agent
+├── tests/
+│   ├── test_fuzzy_replace.py       # Unit tests for the Fuzzy Matcher algorithm
+│   └── test_safety_validator.py    # Unit tests for the Safety Regex logic
 ├── action.yml              # GitHub Action definition file
 ├── Dockerfile              # Containerized environment for the Action runner
-├── requirements.txt        # Python package dependencies (PyGithub, google-genai)
-└── test_local.py           # Test script to run the AI reviewer locally on any file
+└── requirements.txt        # Python package dependencies
 ```
-
----
-
-## 🛠️ Local Testing
-
-You can test the review engine locally on any code file in this repository before configuring GitHub Actions.
-
-1.  **Install dependencies**:
-    ```bash
-    python3 -m pip install google-genai
-    ```
-
-2.  **Export your Gemini API Key**:
-    ```bash
-    export GEMINI_API_KEY="your_actual_api_key_here"
-    ```
-
-3.  **Run the local test**:
-    You can run it against any code file in your repository:
-    ```bash
-    python3 test_local.py path/to/your/file.py
-    ```
 
 ---
 
@@ -82,13 +63,14 @@ on:
 
 jobs:
   ai_review:
+    if: github.actor != 'github-actions[bot]' # Prevents infinite CI loops!
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # Required to push auto-fixes back to the branch
       pull-requests: write # Required for the bot to write PR comments
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5 # Targets Node 24
+        uses: actions/checkout@v4
       
       - name: Run AegisPR
         uses: ./ # Uses action.yml in root
@@ -97,4 +79,4 @@ jobs:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 ```
 
-Whenever a new Pull Request is opened or updated, **AegisPR** will review the diff and post its analysis directly in the PR timeline.
+Whenever a new Pull Request is opened or updated by a human developer, **AegisPR** will review the diff, flag semantic vulnerabilities, and push mathematically sound auto-fixes directly back to the branch!
