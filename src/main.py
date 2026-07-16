@@ -180,9 +180,28 @@ def post_inline_comments(pr, latest_commit, issues):
 
 
 
-def run_semgrep_scan(repo_path: str) -> str:
+def get_modified_lines(patch: str) -> set:
+    modified_lines = set()
+    if not patch: return modified_lines
+    current_line = 0
+    for line in patch.split('\n'):
+        if line.startswith('@@'):
+            m = re.search(r'\+([0-9]+)', line)
+            if m:
+                current_line = int(m.group(1))
+        elif line.startswith('+') and not line.startswith('+++'):
+            modified_lines.add(current_line)
+            current_line += 1
+        elif line.startswith(' ') or line.startswith('-'):
+            if not line.startswith('---'):
+                if not line.startswith('-'):
+                    current_line += 1
+    return modified_lines
+
+def run_semgrep_scan(repo_path: str, changed_files_lines: dict = None) -> str:
     """
     Runs Semgrep on the repository and returns formatted findings for LLM triage.
+    Filters findings to only include lines modified in the PR.
     """
     logger.info("Running Semgrep scan for sequential triage...")
     try:
@@ -210,6 +229,14 @@ def run_semgrep_scan(repo_path: str) -> str:
         for i, finding in enumerate(results):
             path = finding.get("path", "")
             start_line = finding.get("start", {}).get("line", "")
+            
+            # Diff-aware filtering
+            if changed_files_lines is not None:
+                if path not in changed_files_lines:
+                    continue  # Skip files not modified in the PR
+                if start_line not in changed_files_lines[path]:
+                    continue  # Skip vulnerabilities on lines not modified in the PR
+                    
             rule_id = finding.get("check_id", "")
             message = finding.get("extra", {}).get("message", "")
             snippet = finding.get("extra", {}).get("lines", "").strip()
@@ -267,12 +294,14 @@ def main():
     repo = gh.get_repo(repository)
     pr = repo.get_pull(pr_number)
 
-    # Get the diff of the PR
+    # Get the diff of the PR and parse modified line numbers
     files = pr.get_files()
     diff_text = ""
+    changed_files_lines = {}
     for file in files:
         if file.patch:
             diff_text += f"--- a/{file.filename}\n+++ b/{file.filename}\n{file.patch}\n\n"
+            changed_files_lines[file.filename] = get_modified_lines(file.patch)
 
     if not diff_text:
         logger.info("No code changes found. Exiting.")
@@ -285,7 +314,7 @@ def main():
     semgrep_findings = ""
     try:
         workspace = os.getenv("GITHUB_WORKSPACE", "/github/workspace")
-        semgrep_findings = run_semgrep_scan(workspace)
+        semgrep_findings = run_semgrep_scan(workspace, changed_files_lines)
         if semgrep_findings:
             logger.info("Semgrep findings extracted. Injecting into prompt for triage.")
     except Exception as e:
