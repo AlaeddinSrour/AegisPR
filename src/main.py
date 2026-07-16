@@ -25,6 +25,7 @@ class ReviewIssue(BaseModel):
     suggested_fix: str = Field(description="Strictly the 1-2 corrected lines to replace original_code. Do not include entire functions.")
 
 class ReviewReport(BaseModel):
+    analysis_scratchpad: str = Field(description="Step-by-step analysis of the diff. Trace logic flow and strictly hunt for TOCTOU and SSRF before populating issues.")
     issues: List[ReviewIssue]
 
 def run_cmd(cmd):
@@ -378,12 +379,13 @@ To ensure ALL vulnerabilities are successfully reported without API truncation, 
 2. Keep `original_code` and `suggested_fix` strictly to the exact lines that require changing, rather than outputting entire function blocks.
 Do not omit any vulnerabilities. You must report every single true positive flaw you find.
 
-For each issue found, populate the following JSON structure. You MUST return a single JSON object containing an "issues" array.
+For each issue found, populate the following JSON structure. You MUST return a single JSON object containing an "analysis_scratchpad" string and an "issues" array.
 Do NOT use `...` or truncate the array. You MUST output every single true positive vulnerability you find.
 Do NOT output markdown backticks (```json). Output raw, perfectly valid JSON only.
 
 Example format:
 {{
+  "analysis_scratchpad": "Analyzing diff... Found user input passed to requests.post without validation. This is SSRF. Also noticed os.path.exists() before open(), indicating a TOCTOU race condition...",
   "issues": [
     {{
       "file": "path/to/file.c",
