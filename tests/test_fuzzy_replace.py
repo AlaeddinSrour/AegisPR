@@ -1,5 +1,5 @@
 import pytest
-from src.main import fuzzy_replace
+from src.fuzzy import fuzzy_replace
 
 def test_fuzzy_replace_exact_match():
     content = "def test():\n    print('hello')\n    return True\n"
