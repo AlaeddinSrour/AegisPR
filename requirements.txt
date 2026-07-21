@@ -1,5 +1,5 @@
-PyGithub>=2.9.1
-google-genai>=2.12.0
-requests>=2.34.2
-pydantic>=2.13.4
-semgrep>=1.170.0
+PyGithub>=2.9.1,<3.0
+google-genai>=2.12.0,<3.0
+requests>=2.34.2,<3.0
+pydantic>=2.13.4,<3.0
+semgrep>=1.170.0,<2.0
