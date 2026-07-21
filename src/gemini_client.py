@@ -7,6 +7,7 @@ timeout, to handle enterprise rate limits and transient failures.
 
 import concurrent.futures
 import logging
+import re
 import time
 
 from google import genai
@@ -92,11 +93,15 @@ def call_gemini_with_failover(
                     )
                     response = future.result(timeout=API_TIMEOUT_SECONDS)
 
+
                 if not response.parsed:
-                    raise ValueError(
-                        "Structured JSON parsing failed (likely truncated). "
-                        "Triggering retry."
-                    )
+                    error_msg = "Structured JSON parsing failed (likely truncated)."
+                    if hasattr(response, 'text') and response.text:
+                        # Log the first 200 chars and last 200 chars to help debug truncation
+                        text = response.text
+                        snippet = text if len(text) < 400 else f"{text[:200]}...{text[-200:]}"
+                        error_msg += f" Raw response: {snippet}"
+                    raise ValueError(error_msg)
 
                 report: ReviewReport = response.parsed
                 logger.info(
@@ -106,9 +111,19 @@ def call_gemini_with_failover(
                 return report
 
             except Exception as e:
-                logger.warning(f"Request to {model_name} failed: {e}")
+                error_str = str(e)
+                logger.warning(f"Request to {model_name} failed: {error_str}")
                 if attempt < MAX_RETRIES - 1:
-                    time.sleep(retry_delay)
+                    match = re.search(r'Please retry in ([0-9.]+)s', error_str)
+                    if match:
+                        requested_delay = float(match.group(1))
+                        # Use the requested delay (plus a tiny buffer) if it's larger than our backoff
+                        sleep_time = max(retry_delay, requested_delay + 1.0)
+                    else:
+                        sleep_time = retry_delay
+                        
+                    logger.info(f"Waiting {sleep_time:.2f} seconds before retry...")
+                    time.sleep(sleep_time)
                     retry_delay *= 2
 
     raise RuntimeError(
