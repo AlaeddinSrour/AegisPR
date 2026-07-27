@@ -111,14 +111,25 @@ sequenceDiagram
 │   ├── review.yml               # GitHub Actions workflow trigger for AegisPR
 │   └── test.yml                 # CI pipeline running PyTest for internal logic
 ├── src/
-│   └── main.py                  # Core Python logic for the autonomous agent
+│   ├── __init__.py              # Package initializer
+│   ├── main.py                  # Entrypoint & orchestration logic
+│   ├── models.py                # Pydantic data models (ReviewIssue, ReviewReport)
+│   ├── prompt.py                # LLM system prompt & threat guidelines
+│   ├── gemini_client.py         # Gemini API client with failover & retry logic
+│   ├── github_ops.py            # GitHub API operations (comments, auto-fix push)
+│   ├── semgrep_runner.py        # Semgrep SAST scanner with diff-aware filtering
+│   ├── diff.py                  # Unified diff parser & modified-line extraction
+│   ├── fuzzy.py                 # Whitespace-agnostic fuzzy line matcher
+│   └── safety.py                # Least-privilege auto-fix safety validator
 ├── tests/
+│   ├── test_diff.py             # Unit tests for the diff parser
 │   ├── test_fuzzy_replace.py    # Unit tests for the Fuzzy Matcher algorithm
 │   └── test_safety_validator.py # Unit tests for the Safety Regex logic
 ├── action.yml                   # GitHub Action definition file
 ├── Dockerfile                   # Containerized environment for the Action runner
 ├── aegis_pr_logo.png            # Project logo
 ├── requirements.txt             # Python package dependencies
+├── vulnerable_spaghetti.py      # Example vulnerable file for testing/demo
 └── README.md
 ```
 
