@@ -8,9 +8,14 @@ inputs:
   gemini_api_key:
     description: 'API Key for Google Gemini'
     required: true
+  blocking_severities:
+    description: 'Comma-separated list of severities that block the build'
+    required: false
+    default: 'CRITICAL,HIGH'
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  args:
-    - ${{ inputs.github_token }}
-    - ${{ inputs.gemini_api_key }}
+  env:
+    INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+    INPUT_GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+    INPUT_BLOCKING_SEVERITIES: ${{ inputs.blocking_severities }}

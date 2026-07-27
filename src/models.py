@@ -1,6 +1,6 @@
 """Pydantic models for structured LLM review output."""
 
-from typing import List
+from typing import List, Literal
 from pydantic import BaseModel, Field
 
 
@@ -16,8 +16,8 @@ class ReviewIssue(BaseModel):
             "MUST be a valid line number in the current version of the file."
         )
     )
-    severity: str = Field(
-        description="Vulnerability severity. Allowed values: CRITICAL, HIGH, WARNING, INFO."
+    severity: Literal["CRITICAL", "HIGH", "WARNING", "INFO"] = Field(
+        description="Vulnerability severity."
     )
     issue_name: str = Field(
         description=(

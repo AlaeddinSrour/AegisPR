@@ -7,7 +7,6 @@ including token-safe logging to prevent credential leaks in CI output.
 
 import logging
 import os
-import shlex
 import subprocess
 import time
 from typing import List, Optional
@@ -19,26 +18,26 @@ from .fuzzy import fuzzy_replace
 logger = logging.getLogger(__name__)
 
 
-def run_cmd(cmd: str, redact: Optional[str] = None) -> tuple[bool, str]:
+def run_cmd(cmd: list[str], redact: Optional[str] = None) -> tuple[bool, str]:
     """
-    Execute a shell command safely (no shell interpolation).
+    Execute a shell command safely.
 
     Args:
-        cmd: The command string to execute.
+        cmd: The command as a list of arguments.
         redact: Optional string to redact from error logs (e.g., tokens).
 
     Returns:
         (success, stdout_or_stderr)
     """
-    result = subprocess.run(
-        shlex.split(cmd), shell=False, text=True, capture_output=True
-    )
+    result = subprocess.run(cmd, shell=False, text=True, capture_output=True)
     if result.returncode != 0:
-        log_cmd = cmd.replace(redact, "***") if redact else cmd
+        display_cmd = ' '.join(cmd)
+        if redact:
+            display_cmd = display_cmd.replace(redact, "***")
         log_stderr = result.stderr.replace(redact, "***") if redact else result.stderr
         log_stdout = result.stdout.replace(redact, "***") if redact else result.stdout
         logger.error(
-            f"Command failed: {log_cmd}\nStdout: {log_stdout}\nStderr: {log_stderr}"
+            f"Command failed: {display_cmd}\nStdout: {log_stdout}\nStderr: {log_stderr}"
         )
         return False, result.stderr
     return True, result.stdout
@@ -112,19 +111,19 @@ def push_auto_fixes(
     credential leaks in CI console.
     """
     logger.info("Staging and committing auto-fixes...")
-    run_cmd('git config --global --add safe.directory /github/workspace')
-    run_cmd('git config user.name "github-actions[bot]"')
-    run_cmd('git config user.email "github-actions[bot]@users.noreply.github.com"')
+    run_cmd(['git', 'config', '--global', '--add', 'safe.directory', '/github/workspace'])
+    run_cmd(['git', 'config', 'user.name', 'github-actions[bot]'])
+    run_cmd(['git', 'config', 'user.email', 'github-actions[bot]@users.noreply.github.com'])
 
-    run_cmd('git add .')
+    run_cmd(['git', 'add', '.'])
 
-    success, stdout = run_cmd('git status --porcelain')
+    success, stdout = run_cmd(['git', 'status', '--porcelain'])
     if not stdout.strip():
         logger.info("No local modifications found to commit.")
         return
 
     commit_success, _ = run_cmd(
-        'git commit -m "🤖 AI Auto-Fix: Mitigate vulnerabilities"'
+        ['git', 'commit', '-m', '🤖 AI Auto-Fix: Mitigate vulnerabilities']
     )
     if not commit_success:
         logger.error("Failed to commit changes.")
@@ -135,7 +134,7 @@ def push_auto_fixes(
 
     # Token is redacted from all error log output
     push_success, _ = run_cmd(
-        f"git push {remote_url} HEAD:{head_branch}",
+        ['git', 'push', remote_url, f'HEAD:{head_branch}'],
         redact=github_token,
     )
     if push_success:

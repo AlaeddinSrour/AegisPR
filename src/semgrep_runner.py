@@ -13,7 +13,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-SEMGREP_TIMEOUT_SECONDS = 300  # 5-minute hard limit to prevent CI hangs
+SEMGREP_TIMEOUT_SECONDS = int(os.environ.get("INPUT_SEMGREP_TIMEOUT", "300"))
 
 
 def run_semgrep_scan(
@@ -73,14 +73,20 @@ def run_semgrep_scan(
             message = finding.get("extra", {}).get("message", "")
             snippet = finding.get("extra", {}).get("lines", "").strip()
 
-            file_content = ""
+            file_context = ""
             try:
                 full_path = os.path.join(repo_path, path)
                 if os.path.exists(full_path):
                     with open(full_path, 'r') as f:
-                        file_content = f.read()
+                        all_lines = f.readlines()
+                    if start_line:
+                        ctx_start = max(0, int(start_line) - 31)
+                        ctx_end = min(len(all_lines), int(start_line) + 30)
+                        file_context = "".join(all_lines[ctx_start:ctx_end])
+                    else:
+                        file_context = "".join(all_lines[:60])
             except Exception as e:
-                logger.warning(f"Could not read full file {path} for context: {e}")
+                logger.warning(f"Could not read file {path} for context: {e}")
 
             block = (
                 f"Finding #{i + 1}:\n"
@@ -89,10 +95,10 @@ def run_semgrep_scan(
                 f"Message: {message}\n"
                 f"Code Snippet: {snippet}\n"
             )
-            if file_content:
+            if file_context:
                 block += (
-                    f"\n--- FULL FILE CONTEXT ({path}) ---\n"
-                    f"{file_content}\n"
+                    f"\n--- FILE CONTEXT ({path}:{max(1, int(start_line) - 30)}-{int(start_line) + 30}) ---\n"
+                    f"{file_context}\n"
                     f"--- END FILE CONTEXT ---\n"
                 )
 

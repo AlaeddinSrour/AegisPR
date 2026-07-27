@@ -26,12 +26,12 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    if len(sys.argv) < 3:
-        logger.error("Usage: main.py <github_token> <gemini_api_key>")
-        sys.exit(1)
+    github_token = os.environ.get("INPUT_GITHUB_TOKEN", "")
+    gemini_api_key = os.environ.get("INPUT_GEMINI_API_KEY", "")
 
-    github_token = sys.argv[1]
-    gemini_api_key = sys.argv[2]
+    if not github_token or not gemini_api_key:
+        logger.error("Missing INPUT_GITHUB_TOKEN or INPUT_GEMINI_API_KEY environment variable.")
+        sys.exit(1)
 
     event_path = os.getenv("GITHUB_EVENT_PATH")
     repository = os.getenv("GITHUB_REPOSITORY")
@@ -115,14 +115,17 @@ def main() -> None:
         logger.info("Skipping auto-fixing since PR is from a fork (write permissions restricted).")
 
     # ── 3. Gate the build on blocking severity ───────────────────────
+    blocking_severities = os.environ.get(
+        "INPUT_BLOCKING_SEVERITIES", "CRITICAL,HIGH"
+    ).upper().split(",")
     has_blocking_issues = any(
-        issue.severity.upper() in ("CRITICAL", "HIGH")
+        issue.severity.upper() in blocking_severities
         for issue in report.issues
     )
 
     if has_blocking_issues:
         for issue in report.issues:
-            if issue.severity.upper() in ("CRITICAL", "HIGH"):
+            if issue.severity.upper() in blocking_severities:
                 logger.warning(f"Blocking issue found: {issue.issue_name} ({issue.severity})")
         logger.error("CI failed due to CRITICAL or HIGH severity security issues.")
         sys.exit(1)

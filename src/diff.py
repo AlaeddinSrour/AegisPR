@@ -8,7 +8,9 @@ lines were added or modified in the new version of a file.
 import re
 
 
-def get_modified_lines(patch: str) -> set[int]:
+from typing import Optional
+
+def get_modified_lines(patch: Optional[str]) -> set[int]:
     """
     Parse a unified diff patch and return the set of line numbers
     (1-indexed, in the new file) that were added or modified.

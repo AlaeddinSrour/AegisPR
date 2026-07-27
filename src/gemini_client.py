@@ -7,6 +7,7 @@ timeout, to handle enterprise rate limits and transient failures.
 
 import concurrent.futures
 import logging
+import os
 import time
 
 from google import genai
@@ -17,16 +18,18 @@ from .models import ReviewReport
 logger = logging.getLogger(__name__)
 
 # Models to try in priority order
-FAILOVER_MODELS = ['gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash']
+FAILOVER_MODELS = os.environ.get(
+    "INPUT_GEMINI_MODELS", "gemini-3.5-flash,gemini-2.5-pro,gemini-2.5-flash"
+).split(",")
 
 # Maximum retries per model
-MAX_RETRIES = 3
+MAX_RETRIES = int(os.environ.get("INPUT_MAX_RETRIES", "3"))
 
 # Timeout per individual API call (seconds)
-API_TIMEOUT_SECONDS = 180
+API_TIMEOUT_SECONDS = int(os.environ.get("INPUT_API_TIMEOUT", "180"))
 
 # Initial backoff delay (doubles on each retry)
-INITIAL_BACKOFF_SECONDS = 15
+INITIAL_BACKOFF_SECONDS = int(os.environ.get("INPUT_INITIAL_BACKOFF", "15"))
 
 
 def call_gemini_with_failover(
