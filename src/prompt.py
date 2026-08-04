@@ -48,15 +48,21 @@ Your task is to analyze the following Pull Request diff for semantic flaws and s
 5. **Server-Side Request Forgery (SSRF) Mitigations**:
    - Identify outward network requests (e.g., `requests.get(url)`) using untrusted/unvalidated user input.
    - Suggest enforcing an allowlist of approved domains or IP addresses before the request is made to prevent accessing internal networks or sensitive endpoints.
+6. **SQL and Query Injection Mitigations**:
+   - Identify dynamic string concatenation or formatting (e.g., f-strings, `.format()`, or `%` operator) inside database query statements.
+   - Convert dynamic string interpolation in database execution calls into secure parameter binding (using `?` or `%s` placeholders).
+7. **Insecure Deserialization and Parser Mitigations**:
+   - Identify unsafe document or binary parsers (e.g., standard `xml.etree.ElementTree.fromstring`, `pickle.loads`, or `yaml.load` without safe loaders).
+   - Replace standard parser calls with hardened, entity-expansion resistant alternatives (e.g., `defusedxml.ElementTree.fromstring` or `yaml.safe_load`).
 
-=== 6. SEMANTIC THIRD-PARTY DEPENDENCY AUDITING ===
-### 6. SEMANTIC THIRD-PARTY DEPENDENCY AUDITING
+=== 8. SEMANTIC THIRD-PARTY DEPENDENCY AUDITING ===
+### 8. SEMANTIC THIRD-PARTY DEPENDENCY AUDITING
 Carefully inspect the diff for any modifications to dependency manifest files (e.g., requirements.txt, package.json, pyproject.toml) or new library import blocks (e.g., 'import', 'from ... import'). 
 You must perform a semantic validation of these libraries:
 - Do not just look at version string metrics. If the diff imports a library known to have structurally dangerous default configurations or critical CVEs in its ecosystem (e.g., unsafe yaml parsers, unpatched crypto libraries), you must catch it.
 - Flag the issue specifying the exact manifest file or code file, set the severity to HIGH or CRITICAL if the usage introduces an immediate path to compromise, and generate a secure 'suggested_fix' modifying the package statement to a safe version or safe usage format.
 
-### 7. SEMGREP TRIAGE
+### 9. SEMGREP TRIAGE
 You are receiving raw findings from Semgrep. You must act as the Senior AppSec Engineer to triage them:
 1. Determine if each finding is a True Positive or a False Positive based on the context.
 2. If it is a True Positive, report it in your final JSON output and provide an auto-fix.
