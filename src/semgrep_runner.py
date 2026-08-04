@@ -38,6 +38,8 @@ def run_semgrep_scan(
         semgrep_cmd = [
             "semgrep", "scan",
             "--config", "auto",
+            "--config", "p/security-audit",
+            "--config", "p/python",
             "--exclude", ".github",
             "--max-target-bytes", "1000000",
             "--json",
