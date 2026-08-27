@@ -1,195 +1,122 @@
-# AegisPR: Enterprise AI-Driven CI/CD Security Agent
+# AegisPR
 
 <p align="center">
-  <img src="aegis_pr_logo.png" alt="AegisPR Logo" width="250"/>
+  <img src="aegis_pr_logo.png" alt="AegisPR logo" width="220"/>
 </p>
 
-An enterprise-grade, autonomous AI Code Reviewer and Vulnerability Detection Agent integrated directly into the GitHub CI phase. It is designed to hunt for complex logical bugs, security flaws, and resource leaks in Open-Source Software (OSS) before code deployment.
+<p align="center">Evidence-led security review for GitHub pull requests.</p>
 
-Unlike standard static analysis tools, AegisPR combines **Semgrep SAST scanning** with **LLM reasoning** to evaluate code context, aggressively filter false positives, and deliver smart explanations with **secure auto-fixing** for vulnerabilities like Command Injection, Path Traversal, TOCTOU Race Conditions, SSRF, and Supply Chain Risks.
+AegisPR combines a versioned Semgrep ruleset with Gemini or OpenRouter triage. It scans the repository, keeps detector findings that overlap added pull-request lines, adds bounded context, and requires the AI provider to return a validated disposition for every candidate.
 
----
+It complements code review and testing. It does not replace penetration testing, dynamic analysis, dependency scanning, or human security review.
 
-## 🚀 Enterprise Features
+## Highlights
 
-### Reproducible SAST & Evidence-Led AI Triage
-Runs a versioned, bundled Semgrep ruleset and gives every detector candidate a stable ID. Gemini or OpenRouter must return one evidence-backed disposition for every candidate; omitted or invalid verdicts make the audit incomplete instead of silently clean.
+- **Reproducible detector floor** — bundled Semgrep rules are versioned with the action.
+- **Exact PR scope** — comments and blocking decisions are anchored to added lines.
+- **Evidence-led triage** — every candidate receives a stable ID and validated disposition.
+- **Fail-closed completeness** — timeouts, invalid output, and missing verdicts cannot silently produce a clean result.
+- **Gemini and OpenRouter** — use either provider or automatic failover with both keys.
+- **Bounded, redacted context** — common credential patterns are redacted before repository context is sent to an AI provider.
+- **Conservative remediation** — only eligible, high-confidence runtime fixes reach the automatic patch path.
+- **Configurable gates** — choose blocking severities, batching, scan mode, exclusions, and audit limits.
 
-### Multi-Language Reviews
-The bundled coverage floor includes focused Python, JavaScript/TypeScript, Go, Java, and C# rules, while AI semantic review can reason about additional text-based languages present in the PR diff.
+## Coverage
 
-### Diff-Aware Scanning
-Only flags vulnerabilities introduced in the **exact lines modified** in the Pull Request. Zero alert fatigue — developers are never blocked for legacy technical debt.
+### Bundled Semgrep rules
 
-### Deep Context Enrichment
-Adds bounded source windows, Python AST summaries, and imported JavaScript/TypeScript helper definitions. Credentials and common secret formats are redacted locally before repository-derived context enters an AI prompt.
+The deterministic rules cover selected patterns in Python, JavaScript/TypeScript, Go, Java, and C#.
 
-### Bounded Batches and Fail-Closed Completeness
-Large detector result sets are split into configurable batches. AegisPR retains a complete candidate ledger and fails closed when Semgrep times out, returns invalid output, or an AI provider omits a verdict.
-
-### Semantic Dependency Auditing
-Audits the usage semantics of third-party library imports and manifests (e.g., `Dockerfile`, `requirements.txt`, `package.json`) for insecure configurations or ecosystem CVEs.
-
-### Fuzzy Auto-Fixer
-Safely injects AI-synthesized patches into your codebase while mathematically adapting to bizarre indentation anomalies and custom code styles using whitespace-agnostic line matching.
-
-### Least-Privilege Auto-Fixes
-Automatic fixes are limited to high-confidence runtime findings with bounded replacements. Updates are written atomically, syntax-checked where supported, and staged by exact path. The safety validator rejects:
-- Dynamic evaluation (`eval`, `exec`)
-- Unvetted subprocesses (`os.system`, `os.popen`, `os.spawn`, `pty.spawn`)
-- Loose system permissions (`chmod 777`, `stat.S_IRWXO`)
-
-### Indirect Prompt Injection Defense
-The LLM is explicitly instructed to treat all code and comments in PR diffs as **untrusted data**. Any attempt to override the review via injected instructions (e.g., `# IGNORE ALL PREVIOUS INSTRUCTIONS`) is flagged as a `CRITICAL` severity issue: `Indirect Prompt Injection / Audit Override Attempt`.
-
-### CI Pipeline Failure Gate
-AegisPR evaluates the severity of all detected issues. If any issue is classified as `CRITICAL` or `HIGH`, the process exits with code `1` — **blocking the PR from merging** until the vulnerability is resolved.
-
-### Fork PR Auto-Fix Guard
-When a PR originates from a forked repository, AegisPR never pushes auto-fix commits. Because GitHub withholds repository secrets from ordinary fork workflows, the included workflow skips AI review for forks; deployments with a separately secured provider can still use read-only comments.
-
-### API Failover & Throttling
-Supports Gemini and OpenRouter independently or in automatic provider-failover mode. Each provider uses bounded retries, transport-level deadlines, strict structured output validation, and credential-safe error summaries.
-
-### CI/CD Self-Protection
-Prevents infinite CI loops by skipping triggers on bot commits, and gracefully ignores supply-chain fixes inside `.github/workflows` to prevent permission crashes.
-
----
-
-## 🔍 Vulnerability Detection Coverage
-
-AegisPR's LLM prompt is specifically tuned to detect the following vulnerability classes:
-
-| Category | Examples |
+| Weakness family | Bundled coverage |
 |---|---|
-| **Command Injection** | Unsanitized inputs passed to `os.system`, `subprocess`, shell commands |
-| **Path Traversal** | User-controlled paths enabling `../../etc/passwd` style access |
-| **TOCTOU Race Conditions** | `os.path.exists` checks followed by `open` without atomic operations |
-| **Server-Side Request Forgery** | `requests.get` with untrusted/user-controlled URLs |
-| **Secrets & Cryptography** | Hardcoded API keys, weak hashing algorithms, insecure TLS configs |
-| **Supply Chain Risks** | Insecure dependency pinning, typosquatting, vulnerable package versions |
-| **Prompt Injection** | Malicious instructions embedded in code comments or string literals |
+| SSRF | User-controlled URLs reaching outbound request APIs |
+| TOCTOU | Filesystem check-then-use sequences |
+| SQL injection | Express request data reaching raw Sequelize queries |
+| Open redirect | Express request data reaching redirect sinks |
+| Command injection | Express request data reaching shell execution |
+| Path traversal | Express request data reaching filesystem sinks |
+| Code injection | Express request data reaching dynamic evaluation |
+| Unsafe deserialization | Express request data reaching known unsafe deserializers |
+| Authorization review | Request-controlled IDs reaching direct data lookups |
+| XSS | Express request data reaching HTML or DOM sinks |
+| Embedded secrets | Selected private-key and HMAC-key literals in JS/TS runtime code |
 
----
+`semgrep_rule_mode: extended` adds live Semgrep Registry packs. Extended mode requires network access and is less reproducible because Registry content can change independently of AegisPR.
 
-## ⚙️ How It Works
+### AI-assisted analysis
+
+The AI provider receives bounded context around Semgrep candidates. It can validate data flow, reduce false positives, consolidate duplicates, explain impact, and identify related semantic problems visible in that context.
+
+The AI does **not** independently read every changed line or guarantee coverage for languages without a detector candidate. AegisPR also does not currently run an ecosystem CVE scanner such as OSV-Scanner.
+
+## How it works
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Developer
     participant GH as GitHub PR
-    participant Runner as AegisPR Runner
-    participant Semgrep as Semgrep SAST
+    participant Action as AegisPR
+    participant Semgrep
     participant AI as Gemini / OpenRouter
 
-    Developer->>GH: Open / Update PR
-    GH->>Runner: Trigger review.yml workflow
-    Runner->>GH: Fetch PR files & modified line ranges
-    Runner->>Semgrep: Execute SAST scan on repository
-    Semgrep-->>Runner: Return raw JSON findings
-    Runner->>Runner: Filter findings to PR-modified lines only
-    Runner->>Runner: Add bounded source and structural context
-    Runner->>AI: Send redacted diff context + bounded finding batch
-    AI-->>Runner: Return ReviewReport + complete candidate ledger
-    Runner->>Runner: Validate every verdict and changed-line anchor
-    Runner->>GH: Post inline review comments on PR
-    alt Auto-fix available & PR is not from a fork
-        Runner->>Runner: Validate fix safety (block eval/exec/chmod 777)
-        Runner->>Runner: Apply patch via fuzzy line matching
-        Runner->>GH: Commit & push fixes to PR branch
+    Developer->>GH: Open or update PR
+    GH->>Action: Start workflow
+    Action->>GH: Read changed files and added lines
+    Action->>Semgrep: Scan checked-out repository
+    Semgrep-->>Action: Findings and diagnostics
+    Action->>Action: Keep findings overlapping added lines
+    Action->>Action: Add bounded context and redact secrets
+    Action->>AI: Send bounded candidate batch
+    AI-->>Action: Structured candidate dispositions
+    Action->>Action: Validate ledger and evidence
+    Action->>GH: Post inline comments and summary
+    opt Eligible safe fixes enabled
+        Action->>Action: Validate and apply bounded replacements
+        Action->>GH: Commit exact changed paths
     end
-    alt CRITICAL or HIGH severity found
-        Runner->>GH: Exit code 1 → CI build fails
-    else No blocking issues
-        Runner->>GH: Exit code 0 → CI build passes
-    end
+    Action->>GH: Pass, block, or report incomplete audit
 ```
 
----
+## Quick start
 
-## 📁 Repository Structure
+### 1. Add an AI-provider secret
 
-```text
-├── .github/workflows/
-│   ├── review.yml               # GitHub Actions workflow trigger for AegisPR
-│   └── test.yml                 # CI pipeline running PyTest for internal logic
-├── src/
-│   ├── __init__.py              # Package initializer
-│   ├── main.py                  # Entrypoint & orchestration logic
-│   ├── models.py                # Pydantic data models (ReviewIssue, ReviewReport)
-│   ├── prompt.py                # LLM system prompt & threat guidelines
-│   ├── gemini_client.py         # Gemini structured-output client
-│   ├── openrouter_client.py     # OpenRouter structured-output client
-│   ├── triage.py                # Batching, ledger validation, and report merging
-│   ├── scope.py                 # Runtime/test/fixture/generated classification
-│   ├── redaction.py             # Local credential and secret redaction
-│   ├── ast_context.py           # Bounded Python structural summaries
-│   ├── related_context.py       # Imported JS/TS helper context
-│   ├── github_ops.py            # GitHub API operations (comments, auto-fix push)
-│   ├── semgrep_runner.py        # Semgrep SAST scanner with diff-aware filtering
-│   ├── aegispr_rules.yml        # Versioned multi-language security rules
-│   ├── diff.py                  # Unified diff parser & modified-line extraction
-│   ├── fuzzy.py                 # Whitespace-agnostic fuzzy line matcher
-│   └── safety.py                # Least-privilege auto-fix safety validator
-├── tests/
-│   ├── test_diff.py             # Unit tests for the diff parser
-│   ├── test_fuzzy_replace.py    # Unit tests for the Fuzzy Matcher algorithm
-│   └── test_safety_validator.py # Unit tests for the Safety Regex logic
-├── action.yml                   # GitHub Action definition file
-├── Dockerfile                   # Containerized environment for the Action runner
-├── aegis_pr_logo.png            # Project logo
-├── requirements.txt             # Python package dependencies
-├── vulnerable_spaghetti.py      # Example vulnerable file for testing/demo
-└── README.md
-```
+In **Settings → Secrets and variables → Actions**, add at least one of:
 
----
+- `GEMINI_API_KEY`
+- `OPENROUTER_API_KEY`
 
-## 📦 Dependencies
+With both configured, `ai_provider: auto` can fail over between them.
 
-| Package | Purpose |
-|---|---|
-| `PyGithub` ≥ 2.9.1 | GitHub API client for PR comments, file access, and Git operations |
-| `google-genai` ≥ 2.17.0 | Google Gemini API SDK for structured LLM security analysis |
-| `pydantic` ≥ 2.13.4 | Data validation and structured output parsing (`ReviewReport`) |
-| `semgrep` ≥ 1.172.0 | Static analysis engine using the bundled AegisPR ruleset |
-| `requests` ≥ 2.34.2 | HTTP library |
+### 2. Add a workflow
 
----
-
-## ⛓️ GitHub CI/CD Integration
-
-To run AegisPR automatically on every Pull Request in your repository:
-
-### 1. Add AI provider secrets
-1. Go to your repository settings on GitHub (**Settings** → **Secrets and variables** → **Actions**).
-2. Click **New repository secret**.
-3. Add `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, or both. When both are provided, `ai_provider: auto` can fail over between them.
-
-### 2. Configure the Workflow
-The project includes a pre-configured workflow in `.github/workflows/review.yml` which triggers on PR actions:
+Create `.github/workflows/aegispr.yml` in the repository you want to review:
 
 ```yaml
-name: "AI Code Review"
+name: AegisPR
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
 jobs:
-  ai_review:
-    if: github.actor != 'github-actions[bot]' # Prevents infinite CI loops!
+  review:
+    if: github.actor != 'github-actions[bot]' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to push auto-fixes back to the branch
-      pull-requests: write # Required for the bot to write PR comments
+      contents: write
+      pull-requests: write
+
     steps:
-      - name: Checkout Code
+      - name: Checkout pull request
         uses: actions/checkout@v7
-      
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
       - name: Run AegisPR
-        uses: AlaeddinSrour/AegisPR@main # Pin a release tag or commit SHA in production
+        uses: AlaeddinSrour/AegisPR@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
@@ -200,30 +127,73 @@ jobs:
           fail_on_incomplete: 'true'
 ```
 
-Key action controls:
+For production, pin `AlaeddinSrour/AegisPR` to a reviewed release tag or full commit SHA instead of `main`.
 
-| Input | Default | Purpose |
+The included self-review workflow uses a separate trusted checkout of the base revision. This prevents pull-request code from replacing the action implementation that reviews it.
+
+## Configuration
+
+| Input | Default | Description |
 |---|---:|---|
-| `ai_provider` | `auto` | Select Gemini, OpenRouter, or automatic provider failover |
-| `findings_per_batch` | `8` | Bound each structured AI request to 1–20 detector candidates |
-| `semgrep_rule_mode` | `bundled` | Use reproducible local rules; `extended` also queries live Registry packs |
-| `semgrep_exclusions` | `.git,.venv,node_modules` | Exclude repository paths without hard-coding project data directories |
-| `workspace_subdirectory` | `.` | Audit a contained checkout below `GITHUB_WORKSPACE` when action and target are checked out separately |
-| `apply_fixes` | `true` | Apply only deterministic safety-validated fixes |
-| `fail_on_incomplete` | `true` | Prevent an incomplete audit from being reported as clean |
-| `blocking_severities` | `CRITICAL,HIGH` | Configure which confirmed severities fail the check |
+| `github_token` | required | GitHub token used for PR metadata, comments, and enabled fix pushes |
+| `gemini_api_key` | empty | Gemini credential; required when Gemini is selected |
+| `openrouter_api_key` | empty | OpenRouter credential; required when OpenRouter is selected |
+| `ai_provider` | `auto` | `auto`, `gemini`, or `openrouter` |
+| `findings_per_batch` | `8` | Maximum detector candidates per AI batch, from 1 through 20 |
+| `semgrep_rule_mode` | `bundled` | `bundled` or `extended` |
+| `semgrep_exclusions` | `.git,.venv,node_modules` | Comma-separated paths excluded from Semgrep |
+| `max_target_bytes` | `1000000` | Maximum size of one Semgrep target file |
+| `max_diff_chars` | `300000` | Maximum accepted PR diff size in characters |
+| `workspace_subdirectory` | `.` | Audited repository path relative to `GITHUB_WORKSPACE` |
+| `apply_fixes` | `true` | Enable eligible safety-validated automatic fixes |
+| `fail_on_incomplete` | `true` | Fail when detector or AI completeness is unknown |
+| `openrouter_allow_data_collection` | `false` | Allow OpenRouter routes whose providers may retain prompts |
+| `blocking_severities` | `CRITICAL,HIGH` | Comma-separated confirmed severities that fail the job |
 
-Whenever a new Pull Request is opened or updated by a human developer, **AegisPR** will:
+## Results and remediation
 
-1. **Scan** changed PR lines with the versioned Semgrep coverage floor
-2. **Triage** bounded candidates with Gemini or OpenRouter and preserve every verdict
-3. **Comment** inline only when the canonical sink is on an added PR line
-4. **Auto-fix** only deterministic safety-validated patches on non-fork PRs
-5. **Block** configured severities and fail closed when audit completeness is unknown
+AegisPR posts inline comments only when the canonical sink overlaps an added PR line. It posts a summary when inline placement is unavailable or additional context is needed.
 
----
+Automatic fixes are limited to runtime or unclassified code, non-low-confidence findings, and findings explicitly marked for automatic remediation. Changes use bounded replacements, atomic file writes, and exact-path staging. Python and JSON changes receive syntax validation.
 
-## 🧪 Running Tests
+SSRF, open redirect, TOCTOU, and embedded-secret findings always require manual remediation because a safe correction depends on application policy, destination allowlists, atomicity requirements, or credential rotation.
+
+## Security and privacy
+
+- Repository content is treated as untrusted prompt data.
+- Common credentials and secret-like values are redacted locally before AI submission.
+- Credentials are not intentionally included in logs or prompts.
+- OpenRouter routes that may collect prompts are disabled unless explicitly allowed.
+- The included workflow skips fork PRs because ordinary fork workflows do not receive repository secrets.
+- Workflow files are excluded from automatic changes.
+- Workspace paths and changed filenames are validated before filesystem operations.
+
+Only bounded finding context is sent, but excerpts can still contain sensitive business logic. Review your AI provider's retention and privacy terms before enabling the action.
+
+## Limitations
+
+- Static rules can miss vulnerabilities and produce false positives.
+- AI triage can be wrong, unavailable, rate-limited, or slow.
+- Coverage is detector-led; this is not a complete semantic review of the entire PR.
+- Only added PR lines are eligible for comments and blocking findings, so legacy vulnerabilities outside the diff are not reported.
+- AegisPR does not perform dynamic testing, runtime exploitation, container scanning, malware analysis, or dependency/CVE resolution.
+- Large files and oversized diffs are bounded by configuration.
+- Extended rules depend on the availability and current contents of the Semgrep Registry.
+- Passing AegisPR does not prove that a pull request is secure.
+
+## Troubleshooting
+
+| Symptom | What to check |
+|---|---|
+| Audit is incomplete | Inspect Semgrep diagnostics and AI timeout/rate-limit messages; keep `fail_on_incomplete: true` |
+| No AI provider available | Configure the key required by `ai_provider`, or both keys for `auto` |
+| Diff exceeds the boundary | Split the PR or deliberately raise `max_diff_chars` |
+| Large source file is skipped | Raise `max_target_bytes` after reviewing runner resource limits |
+| Extended scan fails | Confirm Registry network access or use `bundled` mode |
+| Fork PR is skipped | Use a secured workflow that never exposes write tokens or provider secrets to untrusted code |
+| Fix was not applied | Check `apply_fixes`, confidence, runtime scope, remediation type, syntax validation, and branch permissions |
+
+## Development
 
 ```bash
 python -m pip install -r requirements-dev.txt
@@ -231,6 +201,23 @@ python -m ruff check src tests aegispr_action.py
 python -m pytest --cov=src --cov-fail-under=75
 ```
 
-The test suite validates:
-- **Fuzzy Matcher** — exact matching, bizarre indentation handling, multi-line replacement, and no-match safety
-- **Safety Validator** — blocks `eval`, `os.system`, permissive `chmod`, while allowing safe `subprocess` usage
+The tests cover diff parsing, Semgrep completeness, multi-language rules, batching and ledger validation, provider behavior, redaction, scope classification, GitHub operations, fuzzy replacement, fix safety, and action metadata.
+
+## Repository layout
+
+```text
+├── .github/workflows/       # CI and self-review workflows
+├── src/
+│   ├── aegispr_rules.yml    # Versioned multi-language Semgrep rules
+│   ├── semgrep_runner.py    # Scanning, diagnostics, IDs, and PR-line filtering
+│   ├── triage.py            # Batching and disposition-ledger validation
+│   ├── gemini_client.py     # Gemini structured-output client
+│   ├── openrouter_client.py # OpenRouter structured-output client
+│   ├── github_ops.py        # Comments and validated fix commits
+│   └── ...                  # Context, scope, models, prompts, and safety helpers
+├── tests/                   # Unit and multi-language detector regression tests
+├── action.yml               # GitHub Action inputs and container definition
+├── Dockerfile               # Action runtime image
+├── aegispr_action.py        # Trusted container entrypoint
+└── requirements*.txt        # Runtime and development dependencies
+```
