@@ -1,43 +1,73 @@
-"""
-Fuzzy code replacement engine.
+"""Conservative code replacement for reviewed, AI-suggested patches."""
 
-Matches AI-suggested original_code against actual file content by
-stripping leading whitespace, then re-applies the file's original
-indentation to the replacement lines.
-"""
+from __future__ import annotations
 
 import re
+import textwrap
 
 
-def fuzzy_replace(content: str, original: str, replacement: str) -> tuple[str, bool]:
+def _lines(value: str) -> list[str]:
+    """Return logical lines without discarding relative indentation."""
+    return value.strip("\r\n").splitlines()
+
+
+def _normalized_block(lines: list[str]) -> list[str]:
+    """Normalize a block's common margin while retaining nested indentation."""
+    if not lines:
+        return []
+    dedented = textwrap.dedent("\n".join(line.rstrip() for line in lines)).splitlines()
+    return [line.rstrip() for line in dedented]
+
+
+def fuzzy_replace(
+    content: str,
+    original: str,
+    replacement: str,
+    *,
+    target_line: int | None = None,
+) -> tuple[str, bool]:
+    """Replace one unambiguous block while preserving relative indentation.
+
+    ``target_line`` is one-indexed and anchors duplicate snippets to the reviewed
+    finding. If no anchored match exists, a replacement is allowed only when the
+    snippet occurs exactly once in the file.
     """
-    Replace `original` with `replacement` in `content`, tolerating
-    indentation differences.
-
-    Both `original` and `replacement` are stripped and compared by their
-    trimmed lines. When a match is found, the replacement lines inherit
-    the leading whitespace of the first matched line in the file.
-
-    Returns:
-        (new_content, True) if the replacement was applied.
-        (content, False) if the original pattern was not found.
-    """
-    orig_lines = [line.strip() for line in original.strip().split('\n')]
-    if not orig_lines:
+    orig_lines = _lines(original)
+    repl_lines = _lines(replacement)
+    if not orig_lines or not repl_lines:
         return content, False
 
-    content_lines = content.split('\n')
+    content_lines = content.split("\n")
     window_size = len(orig_lines)
+    normalized_original = _normalized_block(orig_lines)
+    matches: list[int] = []
 
-    for i in range(len(content_lines) - window_size + 1):
-        window = content_lines[i:i + window_size]
-        if [line.strip() for line in window] == orig_lines:
-            leading_whitespace = re.match(r'^[ \t]*', content_lines[i]).group(0)
-            repl_lines = [
-                leading_whitespace + line.strip()
-                for line in replacement.strip().split('\n')
-            ]
-            content_lines[i:i + window_size] = repl_lines
-            return '\n'.join(content_lines), True
+    for index in range(len(content_lines) - window_size + 1):
+        window = content_lines[index : index + window_size]
+        if _normalized_block(window) == normalized_original:
+            matches.append(index)
 
-    return content, False
+    if target_line is not None and target_line > 0:
+        target_index = target_line - 1
+        anchored = [index for index in matches if index <= target_index < index + window_size]
+        if len(anchored) == 1:
+            match_index = anchored[0]
+        elif anchored:
+            return content, False
+        elif len(matches) == 1:
+            match_index = matches[0]
+        else:
+            return content, False
+    elif len(matches) == 1:
+        match_index = matches[0]
+    else:
+        return content, False
+
+    first_line = content_lines[match_index]
+    leading_whitespace = re.match(r"^[ \t]*", first_line).group(0)
+    normalized_replacement = _normalized_block(repl_lines)
+    replacement_with_margin = [
+        leading_whitespace + line if line else "" for line in normalized_replacement
+    ]
+    content_lines[match_index : match_index + window_size] = replacement_with_margin
+    return "\n".join(content_lines), True

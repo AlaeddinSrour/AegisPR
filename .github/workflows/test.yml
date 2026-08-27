@@ -8,23 +8,48 @@ on:
 
 jobs:
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
     
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
-        python-version: '3.11'
+        python-version: ${{ matrix.python-version }}
         
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest
+        pip install -r requirements-dev.txt
+
+    - name: Compile source
+      run: python -m compileall -q src aegispr_action.py
+
+    - name: Lint
+      run: python -m ruff check src tests aegispr_action.py
         
     - name: Run tests
       env:
         PYTHONPATH: .
       run: |
-        pytest tests/ -v
+        python -m pytest --cov=src --cov-report=term-missing --cov-fail-under=75
+
+  container-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Build action image
+      run: docker build --tag aegispr:test .
+
+    - name: Import packaged action and verify bundled rules
+      run: >-
+        docker run --rm --entrypoint python aegispr:test -c
+        "from src.semgrep_runner import bundled_rules_sha256;
+        from src.main import main;
+        assert len(bundled_rules_sha256()) == 64;
+        assert callable(main)"

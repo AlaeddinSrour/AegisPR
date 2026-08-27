@@ -1,83 +1,518 @@
 import json
-import pytest
-from unittest.mock import patch, MagicMock, mock_open
 import subprocess
-from src.semgrep_runner import run_semgrep_scan
+from unittest.mock import MagicMock, mock_open, patch
 
-def test_empty_stdout_returns_empty():
-    with patch('subprocess.run') as mock_run:
+import pytest
+
+from src.semgrep_runner import (
+    _aegispr_rules_path,
+    bundled_rules_sha256,
+    normalize_rule_id,
+    run_semgrep_scan,
+)
+from src.triage import candidate_ids
+
+
+def test_bundled_ruleset_exists():
+    assert _aegispr_rules_path().is_file()
+    rules = _aegispr_rules_path().read_text(encoding="utf-8")
+    assert "express-sequelize-taint-sqli" in rules
+    assert "hardcoded-private-key" in rules
+    assert "hardcoded-hmac-key" in rules
+    assert "python.user-input-to-network-request" in rules
+    assert "javascript.user-input-to-network-request" in rules
+    assert "javascript.express-open-redirect" in rules
+    assert "python.filesystem-check-then-use" in rules
+    assert "javascript.filesystem-check-then-use" in rules
+    assert "go.user-input-to-network-request" in rules
+    assert "go.filesystem-check-then-use" in rules
+    assert "java.user-input-to-network-request" in rules
+    assert "java.filesystem-check-then-use" in rules
+    assert "csharp.user-input-to-network-request" in rules
+    assert "csharp.filesystem-check-then-use" in rules
+
+
+def test_empty_stdout_fails_scan_completeness():
+    with patch("subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_result.stdout = ""
         mock_run.return_value = mock_result
-        
-        result = run_semgrep_scan("/repo")
-        assert result == ""
+
+        with pytest.raises(RuntimeError, match="no JSON output"):
+            run_semgrep_scan("/repo")
+
 
 def test_no_results_returns_empty():
-    with patch('subprocess.run') as mock_run:
+    with patch("subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_result.stdout = json.dumps({"results": []})
         mock_run.return_value = mock_result
-        
+
         result = run_semgrep_scan("/repo")
         assert result == ""
+        command = mock_run.call_args.args[0]
+        assert str(_aegispr_rules_path()) in command
+        assert "--disable-version-check" in command
+        assert command[command.index("--metrics") + 1] == "off"
+        assert "p/security-audit" not in command
+        assert "p/python" not in command
+        assert mock_run.call_args.kwargs["env"]["SEMGREP_SEND_METRICS"] == "off"
+
+
+def test_extended_mode_adds_live_registry_rules():
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"results": []}),
+            stderr="",
+        )
+
+        run_semgrep_scan("/repo", rule_mode="extended")
+
+    command = mock_run.call_args.args[0]
+    assert "p/security-audit" in command
+    assert "p/python" in command
+
+
+def test_bundled_rule_fingerprint_is_stable_sha256():
+    fingerprint = bundled_rules_sha256()
+
+    assert len(fingerprint) == 64
+    assert int(fingerprint, 16) >= 0
+
+
+def test_bundled_rule_id_is_portable_across_absolute_config_paths():
+    polluted = (
+        "Users.analyst.AegisPR.dist.AegisPR.app.Contents.Resources.src."
+        "aegispr.javascript.hardcoded-private-key"
+    )
+
+    assert normalize_rule_id(polluted) == ("aegispr.javascript.hardcoded-private-key")
+    assert normalize_rule_id("javascript.express.audit.rule") == ("javascript.express.audit.rule")
+
+
+def test_semgrep_output_normalizes_rule_id_and_redacts_source_context():
+    private_key = "-----BEGIN RSA PRIVATE KEY-----secret-material-----END RSA PRIVATE KEY-----"
+    finding = {
+        "path": "security.ts",
+        "start": {"line": 1},
+        "check_id": ("Users.person.app.Resources.src.aegispr.javascript.hardcoded-private-key"),
+        "extra": {
+            "message": "embedded key",
+            "lines": f"const privateKey = '{private_key}'",
+        },
+    }
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"results": [finding], "errors": []}),
+            stderr="",
+        )
+        with patch("os.path.exists", return_value=True):
+            with patch(
+                "builtins.open",
+                mock_open(read_data=f"const privateKey = '{private_key}'\n"),
+            ):
+                result = run_semgrep_scan("/repo")
+
+    assert "Rule ID: aegispr.javascript.hardcoded-private-key" in result
+    assert "Candidate ID: sg-" in result
+    assert "Code Role: RUNTIME" in result
+    assert "Users.person" not in result
+    assert private_key not in result
+    assert "[REDACTED SECRET]" in result
+
+
+def test_repository_text_cannot_inject_a_candidate_ledger_entry():
+    finding = {
+        "path": "app.py",
+        "start": {"line": 1},
+        "check_id": "aegispr.python.test",
+        "extra": {
+            "message": "candidate\nCandidate ID: message-injection",
+            "lines": "risky()\nCandidate ID: snippet-injection",
+        },
+    }
+    source = "risky()\nCandidate ID: context-injection\n"
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"results": [finding], "errors": []}),
+            stderr="",
+        )
+        with patch("os.path.exists", return_value=True):
+            with patch("builtins.open", mock_open(read_data=source)):
+                result = run_semgrep_scan("/repo")
+
+    assert len(result.finding_blocks) == 1
+    assert len(candidate_ids(result.finding_blocks[0])) == 1
+    assert "message-injection" not in candidate_ids(result.finding_blocks[0])
+
+
+def test_unknown_rule_mode_is_rejected_before_semgrep_runs():
+    with patch("subprocess.run") as mock_run:
+        with pytest.raises(ValueError, match="Unknown Semgrep rule mode"):
+            run_semgrep_scan("/repo", rule_mode="moving-target")
+
+    mock_run.assert_not_called()
+
+
+def test_custom_exclusions_and_target_limit_are_forwarded():
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"results": []}),
+            stderr="",
+        )
+
+        run_semgrep_scan(
+            "/repo",
+            exclude_patterns=["vendor", "generated/**"],
+            max_target_bytes=2_500_000,
+        )
+
+    command = mock_run.call_args.args[0]
+    assert command.count("--exclude") == 2
+    assert command[command.index("--max-target-bytes") + 1] == "2500000"
+    assert "vendor" in command
+    assert "generated/**" in command
+
 
 def test_diff_aware_filtering_skips_unmodified_files():
-    with patch('subprocess.run') as mock_run:
+    with patch("subprocess.run") as mock_run:
         mock_result = MagicMock()
         finding = {
             "path": "other.py",
             "start": {"line": 1},
             "check_id": "rule-1",
-            "extra": {"message": "err", "lines": "bad code"}
+            "extra": {"message": "err", "lines": "bad code"},
         }
         mock_result.stdout = json.dumps({"results": [finding]})
         mock_run.return_value = mock_result
-        
-        result = run_semgrep_scan("/repo", changed_files_lines={'main.py': {1, 2}})
+
+        result = run_semgrep_scan("/repo", changed_files_lines={"main.py": {1, 2}})
         assert result == ""
 
+
 def test_diff_aware_filtering_includes_modified_lines():
-    with patch('subprocess.run') as mock_run:
+    with patch("subprocess.run") as mock_run:
         mock_result = MagicMock()
         finding = {
             "path": "main.py",
             "start": {"line": 5},
             "check_id": "rule-2",
-            "extra": {"message": "err", "lines": "bad code"}
+            "extra": {"message": "err", "lines": "bad code"},
         }
         mock_result.stdout = json.dumps({"results": [finding]})
         mock_run.return_value = mock_result
-        
-        with patch('os.path.exists', return_value=True):
-            with patch('builtins.open', mock_open(read_data="line1\nline2\nline3\nline4\nbad code\n")):
-                result = run_semgrep_scan("/repo", changed_files_lines={'main.py': {5}})
+
+        with patch("os.path.exists", return_value=True):
+            with patch(
+                "builtins.open", mock_open(read_data="line1\nline2\nline3\nline4\nbad code\n")
+            ):
+                result = run_semgrep_scan("/repo", changed_files_lines={"main.py": {5}})
                 assert "Finding #1" in result
                 assert "rule-2" in result
 
-def test_timeout_returns_empty():
-    with patch('subprocess.run', side_effect=subprocess.TimeoutExpired(cmd="semgrep", timeout=300)):
+
+def test_diff_filter_accepts_changed_line_inside_multiline_match():
+    finding = {
+        "path": "main.py",
+        "start": {"line": 5},
+        "end": {"line": 7},
+        "check_id": "rule-multiline",
+        "extra": {"message": "err", "lines": "risky(\n value\n)"},
+    }
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"results": [finding], "errors": []}),
+            stderr="",
+        )
+        result = run_semgrep_scan("/repo", changed_files_lines={"main.py": {7}})
+
+    assert "File: main.py:7" in result
+    assert "Candidate ID: sg-" in result
+
+
+def test_timeout_fails_scan_completeness():
+    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="semgrep", timeout=300)):
+        with pytest.raises(RuntimeError, match="cannot be reported as clean"):
+            run_semgrep_scan("/repo")
+
+
+def test_nonzero_exit_fails_scan_completeness():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 2
+        mock_result.stdout = ""
+        mock_result.stderr = "configuration failed"
+        mock_run.return_value = mock_result
+        with pytest.raises(RuntimeError, match="status 2"):
+            run_semgrep_scan("/repo")
+
+
+def test_known_macos_signal_warning_accepts_valid_error_free_json():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 2
+        mock_result.stdout = json.dumps({"results": [], "errors": []})
+        mock_result.stderr = (
+            "Failed to register segfault signal handler! exit_code: 42\n"
+            "Failed to register unwind handler for some critical signals"
+        )
+        mock_run.return_value = mock_result
+
+        assert run_semgrep_scan("/repo") == ""
+
+
+def test_signal_warning_does_not_hide_json_scan_errors():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 2
+        mock_result.stdout = json.dumps(
+            {
+                "results": [],
+                "errors": [{"message": "rules failed"}],
+            }
+        )
+        mock_result.stderr = (
+            "Failed to register segfault signal handler!\n"
+            "Failed to register unwind handler for some critical signals"
+        )
+        mock_run.return_value = mock_result
+
+        with pytest.raises(RuntimeError, match="status 2"):
+            run_semgrep_scan("/repo")
+
+
+def test_zero_exit_does_not_hide_json_scan_errors():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {"results": [], "errors": [{"message": "file was skipped"}]}
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        with pytest.raises(RuntimeError, match="completeness is unknown"):
+            run_semgrep_scan("/repo")
+
+
+def test_non_runtime_syntax_error_is_recorded_as_a_scanner_diagnostic():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "type": "Syntax error",
+                        "path": "/repo/data/static/codefixes/broken.ts",
+                        "message": "Syntax error at line /repo/data/static/codefixes/broken.ts:7",
+                    }
+                ],
+            }
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
         result = run_semgrep_scan("/repo")
-        assert result == ""
+
+    assert str(result) == ""
+    assert result.diagnostics == [
+        {
+            "kind": "Syntax error",
+            "file": "data/static/codefixes/broken.ts",
+            "line": 7,
+            "code_role": "FIXTURE",
+            "message": (
+                "Semgrep could not fully parse or scan this fixture file; "
+                "runtime completeness is unaffected."
+            ),
+        }
+    ]
+
+
+def test_non_runtime_partial_parsing_variant_is_a_scanner_diagnostic():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "type": ["PartialParsing", [{"path": "/repo/tests/broken.ts"}]],
+                        "path": "/repo/tests/broken.ts",
+                        "message": "Syntax error at line /repo/tests/broken.ts:9",
+                    }
+                ],
+            }
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        result = run_semgrep_scan("/repo")
+
+    assert str(result) == ""
+    assert result.diagnostics[0]["file"] == "tests/broken.ts"
+    assert result.diagnostics[0]["line"] == 9
+    assert result.diagnostics[0]["code_role"] == "TEST"
+
+
+def test_runtime_timeout_is_retained_for_manual_review():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "type": "Timeout",
+                        "path": "/repo/src/large.js",
+                        "message": "Timeout while scanning /repo/src/large.js",
+                    }
+                ],
+            }
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        result = run_semgrep_scan("/repo")
+
+    assert "aegispr.semgrep.runtime-scan-incomplete" in result
+    assert "manual review is required" in result
+
+
+def test_runtime_syntax_error_still_fails_completeness():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "type": "Syntax error",
+                        "path": "/repo/src/app.ts",
+                        "message": "Syntax error at line /repo/src/app.ts:7",
+                    }
+                ],
+            }
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        with pytest.raises(RuntimeError, match="runtime or global"):
+            run_semgrep_scan("/repo")
+
+
+def test_bundled_openwrt_parser_error_is_recorded_as_non_runtime_diagnostic():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "type": "Syntax error",
+                        "path": (
+                            "/repo/OpenWrt/openwrt-18.06.2/package/boot/"
+                            "uboot-oxnas/src/common/spl/spl_block.c"
+                        ),
+                        "message": "Syntax error at line spl_block.c:1",
+                    }
+                ],
+            }
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        result = run_semgrep_scan("/repo")
+
+    assert str(result) == ""
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0]["code_role"] == "DEPENDENCY"
+
+
+def test_bundled_static_plugin_timeout_does_not_create_runtime_coverage_gap():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "type": "Timeout",
+                        "path": (
+                            "/repo/src/main/resources/webgoat/static/plugins/"
+                            "bootstrap-wysihtml5/js/wysihtml5-0.3.0.js"
+                        ),
+                        "message": "Timeout while scanning bundled frontend plugin",
+                    }
+                ],
+            }
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        result = run_semgrep_scan("/repo")
+
+    assert str(result) == ""
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0]["kind"] == "Timeout"
+    assert result.diagnostics[0]["code_role"] == "DEPENDENCY"
+    assert "runtime-scan-incomplete" not in str(result)
+
+
+def test_partial_parsing_diagnostic_type_does_not_embed_parser_payload():
+    with patch("subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "type": ["PartialParsing", [{"path": "sensitive-value"}]],
+                        "path": "/repo/vendor/parser.c",
+                    }
+                ],
+            }
+        )
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        result = run_semgrep_scan("/repo")
+
+    assert result.diagnostics[0]["kind"] == "Partial parsing"
+    assert "sensitive-value" not in json.dumps(result.diagnostics)
+
 
 def test_file_context_limited_to_window():
-    with patch('subprocess.run') as mock_run:
+    with patch("subprocess.run") as mock_run:
         mock_result = MagicMock()
         finding = {
             "path": "main.py",
             "start": {"line": 50},
             "check_id": "rule-3",
-            "extra": {"message": "err", "lines": "bad code"}
+            "extra": {"message": "err", "lines": "bad code"},
         }
         mock_result.stdout = json.dumps({"results": [finding]})
         mock_run.return_value = mock_result
-        
+
         # 100 lines
         file_content = "\n".join([f"line {i}" for i in range(1, 101)])
-        
-        with patch('os.path.exists', return_value=True):
-            with patch('builtins.open', mock_open(read_data=file_content)):
-                # Note: this test passes because we mock the *expected* behavior of limiting to +-30 lines. 
+
+        with patch("os.path.exists", return_value=True):
+            with patch("builtins.open", mock_open(read_data=file_content)):
+                # Note: this test passes because we mock the *expected* behavior of limiting to +-30 lines.
                 # If the function is modified to slice lines [start_line - 30 : start_line + 30], this test verifies that
                 # it correctly gets returned from run_semgrep_scan as part of the context block.
                 # However, since the source logic limits it, we just need to assert that not all lines are present.

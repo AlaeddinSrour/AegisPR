@@ -1,5 +1,5 @@
 name: 'AegisPR'
-description: 'AI-driven Code Review and Vulnerability Detection using Gemini'
+description: 'Evidence-led PR security review using versioned Semgrep rules and Gemini or OpenRouter'
 author: 'AegisPR'
 inputs:
   github_token:
@@ -7,7 +7,50 @@ inputs:
     required: true
   gemini_api_key:
     description: 'API Key for Google Gemini'
-    required: true
+    required: false
+  openrouter_api_key:
+    description: 'API key for OpenRouter (optional alternative to Gemini)'
+    required: false
+  ai_provider:
+    description: 'AI provider: auto, gemini, or openrouter'
+    required: false
+    default: 'auto'
+  findings_per_batch:
+    description: 'Maximum detector candidates sent in one bounded AI batch (1-20)'
+    required: false
+    default: '8'
+  semgrep_rule_mode:
+    description: 'bundled for reproducible rules, or extended to add live Registry rules'
+    required: false
+    default: 'bundled'
+  semgrep_exclusions:
+    description: 'Comma-separated Semgrep exclusions'
+    required: false
+    default: '.git,.venv,node_modules'
+  max_target_bytes:
+    description: 'Maximum individual source-file size scanned by Semgrep'
+    required: false
+    default: '1000000'
+  max_diff_chars:
+    description: 'Maximum PR diff characters accepted for one complete review'
+    required: false
+    default: '300000'
+  workspace_subdirectory:
+    description: 'Repository location relative to GITHUB_WORKSPACE'
+    required: false
+    default: '.'
+  apply_fixes:
+    description: 'Apply deterministic safety-validated fixes to non-fork PRs'
+    required: false
+    default: 'true'
+  fail_on_incomplete:
+    description: 'Fail closed when a detector candidate lacks a valid AI verdict'
+    required: false
+    default: 'true'
+  openrouter_allow_data_collection:
+    description: 'Allow OpenRouter routes whose providers may retain prompts'
+    required: false
+    default: 'false'
   blocking_severities:
     description: 'Comma-separated list of severities that block the build'
     required: false
@@ -18,4 +61,15 @@ runs:
   env:
     INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
     INPUT_GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+    INPUT_OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
+    INPUT_AI_PROVIDER: ${{ inputs.ai_provider }}
+    INPUT_FINDINGS_PER_BATCH: ${{ inputs.findings_per_batch }}
+    INPUT_SEMGREP_RULE_MODE: ${{ inputs.semgrep_rule_mode }}
+    INPUT_SEMGREP_EXCLUSIONS: ${{ inputs.semgrep_exclusions }}
+    INPUT_MAX_TARGET_BYTES: ${{ inputs.max_target_bytes }}
+    INPUT_MAX_DIFF_CHARS: ${{ inputs.max_diff_chars }}
+    INPUT_WORKSPACE_SUBDIRECTORY: ${{ inputs.workspace_subdirectory }}
+    INPUT_APPLY_FIXES: ${{ inputs.apply_fixes }}
+    INPUT_FAIL_ON_INCOMPLETE: ${{ inputs.fail_on_incomplete }}
+    INPUT_OPENROUTER_ALLOW_DATA_COLLECTION: ${{ inputs.openrouter_allow_data_collection }}
     INPUT_BLOCKING_SEVERITIES: ${{ inputs.blocking_severities }}
