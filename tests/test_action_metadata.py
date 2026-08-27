@@ -27,7 +27,9 @@ def test_container_entrypoint_cannot_import_target_repository_src_first():
 def test_self_review_keeps_action_code_separate_from_pr_audit_data():
     workflow = (ROOT / ".github/workflows/review.yml").read_text(encoding="utf-8")
 
-    assert "Checkout trusted AegisPR action" in workflow
-    assert "Checkout pull-request code as audit data" in workflow
-    assert "uses: ./.aegispr-action" in workflow
+    audit_checkout = workflow.index("Checkout pull-request code as audit data")
+    trusted_checkout = workflow.index("Checkout trusted AegisPR action")
+    action_run = workflow.index("uses: ./.aegispr-action")
+
+    assert audit_checkout < trusted_checkout < action_run
     assert workflow.count("persist-credentials: false") == 2
