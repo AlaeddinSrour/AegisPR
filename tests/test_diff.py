@@ -1,4 +1,3 @@
-import pytest
 from src.diff import get_modified_lines
 
 

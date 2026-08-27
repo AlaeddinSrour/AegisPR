@@ -6,19 +6,37 @@ on:
 
 jobs:
   ai_review:
-    if: github.actor != 'github-actions[bot]'
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to push auto-fixes back to the branch
       pull-requests: write # Required to post comments on the PR
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v5
+      - name: Checkout pull-request code as audit data
+        uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      # This checkout must run after the root checkout. A root checkout into an
+      # uninitialized workspace can remove a previously-created nested checkout.
+      - name: Checkout trusted AegisPR action
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .aegispr-action
+          persist-credentials: false
       
       - name: Run AegisPR
-        uses: ./ # Uses the action.yml from the root of this repository
+        uses: ./.aegispr-action
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          ai_provider: auto
+          semgrep_rule_mode: bundled
+          findings_per_batch: '8'
+          fail_on_incomplete: 'true'
